@@ -811,13 +811,6 @@ body.dark-theme #welcome-screen {
     color: var(--text-primary);
 }
 
-.question-source {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    font-weight: 400;
-    margin-top: 2px;
-}
-
 .question-badges {
     display: flex;
     gap: var(--space-xs);

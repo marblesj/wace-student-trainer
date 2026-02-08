@@ -2343,12 +2343,9 @@ var StudyUI = {
         html += '<div class="question-card">';
         html += '<div class="question-header">';
         var examSource = StudyUI._parseExamSource(q._filename || questionInfo.filename);
-        if (examSource) {
-            html += '<div class="question-source">' +
-                StudyUI._escapeHtml(examSource) + '</div>';
-        }
-        html += '<h3 class="question-ref">' +
-            StudyUI._escapeHtml(q.questionReference || questionInfo.filename) + '</h3>';
+        var refText = (examSource ? examSource + " " : "") +
+            (q.questionReference || questionInfo.filename);
+        html += '<h3 class="question-ref">' + StudyUI._escapeHtml(refText) + '</h3>';
         html += '<div class="question-badges">';
         html += '<span class="badge badge-section">' +
             StudyUI._escapeHtml(q.sectionName || "") + '</span>';
