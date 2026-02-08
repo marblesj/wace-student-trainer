@@ -2342,6 +2342,11 @@ var StudyUI = {
         // Question header
         html += '<div class="question-card">';
         html += '<div class="question-header">';
+        var examSource = StudyUI._parseExamSource(q._filename || questionInfo.filename);
+        if (examSource) {
+            html += '<div class="question-source">' +
+                StudyUI._escapeHtml(examSource) + '</div>';
+        }
         html += '<h3 class="question-ref">' +
             StudyUI._escapeHtml(q.questionReference || questionInfo.filename) + '</h3>';
         html += '<div class="question-badges">';
@@ -3928,6 +3933,36 @@ var StudyUI = {
     },
 
     // ---- UTILITY METHODS ----
+
+    /**
+     * Parse the exam source from a question filename.
+     * e.g. "WAEPSem1_2017_CA_Q09_Complete.json" -> "WACE 2017 Semester 1"
+     * @private
+     */
+    _parseExamSource: function(filename) {
+        if (!filename) return "";
+        // Try WAEP pattern: WAEPSem{N}_{YEAR}_{SECTION}_Q{NN}
+        var waepMatch = filename.match(/WAEP\s*Sem(\d+)[_\s]+(\d{4})/i);
+        if (waepMatch) {
+            return "WACE " + waepMatch[2] + " Semester " + waepMatch[1];
+        }
+        // Try generic year pattern with semester
+        var semMatch = filename.match(/Sem(?:ester)?\s*(\d+)[_\s]+(\d{4})/i);
+        if (semMatch) {
+            return semMatch[2] + " Semester " + semMatch[1];
+        }
+        // Try year_Sem pattern (reversed)
+        var revMatch = filename.match(/(\d{4})[_\s]+Sem(?:ester)?\s*(\d+)/i);
+        if (revMatch) {
+            return "WACE " + revMatch[1] + " Semester " + revMatch[2];
+        }
+        // Try just a year
+        var yearMatch = filename.match(/(\d{4})/);
+        if (yearMatch) {
+            return "WACE " + yearMatch[1];
+        }
+        return "";
+    },
 
     /**
      * Create a summary stat card HTML string.

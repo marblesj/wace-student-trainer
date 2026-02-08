@@ -811,6 +811,13 @@ body.dark-theme #welcome-screen {
     color: var(--text-primary);
 }
 
+.question-source {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 2px;
+}
+
 .question-badges {
     display: flex;
     gap: var(--space-xs);
@@ -854,7 +861,7 @@ body.dark-theme #welcome-screen {
 }
 
 .question-stimulus {
-    font-size: 1rem;
+    font-size: 1.15rem;
     color: var(--text-primary);
     margin-bottom: var(--space-lg);
     line-height: 1.7;
@@ -890,17 +897,17 @@ body.dark-theme #welcome-screen {
 .part-label {
     font-weight: 700;
     color: var(--text-primary);
-    font-size: 1rem;
+    font-size: 1.1rem;
 }
 
 .part-marks {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     color: var(--text-muted);
     font-style: italic;
 }
 
 .part-text {
-    font-size: 1rem;
+    font-size: 1.15rem;
     color: var(--text-primary);
     line-height: 1.7;
 }
@@ -983,6 +990,7 @@ body.dark-theme #welcome-screen {
 
 .solution-line .line-text {
     flex: 1;
+    font-size: 1.1rem;
     color: var(--text-primary);
     line-height: 1.6;
 }
@@ -1065,7 +1073,7 @@ body.dark-theme #welcome-screen {
 
 .mark-text {
     flex: 1;
-    font-size: 0.9rem;
+    font-size: 1.05rem;
     color: var(--text-secondary);
     line-height: 1.5;
 }
@@ -1134,7 +1142,7 @@ body.dark-theme #welcome-screen {
 
 .mark-indicator .mark-desc {
     flex: 1;
-    font-size: 0.85rem;
+    font-size: 1rem;
     line-height: 1.4;
 }
 
@@ -1329,7 +1337,7 @@ body.dark-theme #welcome-screen {
     flex: 1;
     color: var(--text-primary);
     line-height: 1.6;
-    font-size: 0.9rem;
+    font-size: 1.05rem;
 }
 
 /* ---- QUICK ASSESS (question-level) ---- */
@@ -1484,6 +1492,7 @@ body.dark-theme #welcome-screen {
 
 .guided-line {
     color: var(--text-primary);
+    font-size: 1.1rem;
     line-height: 1.8;
     margin-bottom: var(--space-sm);
 }
@@ -2021,7 +2030,7 @@ body.dark-theme #welcome-screen {
 
 /* ---- MATHJAX OVERRIDES ---- */
 .MathJax {
-    font-size: 1.1em !important;
+    font-size: 1.25em !important;
 }
 
 
