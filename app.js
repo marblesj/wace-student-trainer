@@ -2129,6 +2129,8 @@ var StudyUI = {
     totalParts: 0,
     _nextReminderMinutes: 30,   // first reminder at 30 min, then +20 each time
     _markStates: {},            // inline mark states: { partIdx: [bool, ...] }
+    _questionTimer: null,       // { interval, startTime, allowedSeconds, elapsed, overtime }
+    _questionTimings: [],       // [{ filename, totalMarks, allowedSec, actualSec, overtime, partsCorrect, partsTotal, problemTypes }]
 
     /**
      * Initialise study UI event listeners.
@@ -2187,6 +2189,7 @@ var StudyUI = {
             wrongListOnly: wrongListOnly
         }).then(function() {
             StudyUI._nextReminderMinutes = 30; // reset duration reminder
+            StudyUI._questionTimings = [];     // reset per-question timings
             StudyUI.loadNextQuestion();
         });
     },
@@ -2282,6 +2285,7 @@ var StudyUI = {
             return Promise.resolve(); // not all parts assessed yet
         }
         StudyUI._resultsRecorded = true;
+        StudyUI._updateLastTiming();
         return SessionEngine.recordResults(
             StudyUI.currentFilename, StudyUI.partResults
         );
@@ -2323,6 +2327,14 @@ var StudyUI = {
         pct = Math.min(pct, 100);
         html += '<div class="progress-bar"><div class="progress-fill" style="width:' +
             pct + '%"></div></div>';
+        html += '</div>';
+
+        // Question timer
+        var allowedSec = (q.totalMarks || 5) * 60;
+        html += '<div class="question-timer" id="question-timer">';
+        html += '<span class="timer-icon">' + SYMBOLS.CLOCK + '</span>';
+        html += '<span class="timer-display" id="timer-display">' +
+            StudyUI._formatTime(allowedSec) + '</span>';
         html += '</div>';
 
         // Question header
@@ -2427,6 +2439,9 @@ var StudyUI = {
         // Render math
         UI.renderMath(area);
 
+        // Start question timer
+        StudyUI._startQuestionTimer(q.totalMarks || 5);
+
         // Check session duration for break reminder
         StudyUI._checkDurationReminder();
     },
@@ -2510,6 +2525,9 @@ var StudyUI = {
     showSolution: function() {
         var q = StudyUI.currentQuestion;
         if (!q || !q.parts) return;
+
+        // Stop question timer
+        StudyUI._stopQuestionTimer();
 
         // Hide the "show solution" button
         var showArea = document.querySelector(".show-solution-area");
@@ -3487,6 +3505,9 @@ var StudyUI = {
      * Show the session summary screen.
      */
     showSessionSummary: function() {
+        // Stop timer if still running
+        StudyUI._stopQuestionTimer();
+
         // Record results for last question before ending session
         StudyUI._recordResultsIfNeeded().then(function() {
             return SessionEngine.end();
@@ -3495,8 +3516,10 @@ var StudyUI = {
             if (!area) return;
 
             var sd = sessionData || SessionEngine.sessionData;
+            var timings = StudyUI._questionTimings;
             var html = '<div class="session-summary">';
 
+            // ---- HEADER ----
             html += '<div class="summary-header">';
             if (sd.accuracyPercent >= 80) {
                 html += '<div class="summary-icon">' + SYMBOLS.TROPHY + '</div>';
@@ -3510,18 +3533,33 @@ var StudyUI = {
             }
             html += '</div>';
 
-            // Stats grid
+            // ---- OVERVIEW STATS ----
+            var totalTimeSec = 0;
+            var totalAllowedSec = 0;
+            var overtimeCount = 0;
+            timings.forEach(function(t) {
+                totalTimeSec += t.actualSec;
+                totalAllowedSec += t.allowedSec;
+                if (t.overtime) overtimeCount++;
+            });
+            var totalTimeMin = Math.round(totalTimeSec / 60);
+            var avgSecPerMark = 0;
+            var totalMarksAttempted = 0;
+            timings.forEach(function(t) { totalMarksAttempted += t.totalMarks; });
+            if (totalMarksAttempted > 0) {
+                avgSecPerMark = Math.round(totalTimeSec / totalMarksAttempted);
+            }
+
             html += '<div class="summary-stats">';
             html += StudyUI._summaryCard("Questions", sd.questionsAttempted);
-            html += StudyUI._summaryCard("Parts Correct",
-                sd.partsCorrect + " / " + sd.partsAttempted);
-            html += StudyUI._summaryCard("Accuracy",
-                sd.accuracyPercent + "%");
-            html += StudyUI._summaryCard("Duration",
-                sd.durationMinutes + " min");
+            html += StudyUI._summaryCard("Accuracy", sd.accuracyPercent + "%");
+            html += StudyUI._summaryCard("Total Time", totalTimeMin + " min");
+            html += StudyUI._summaryCard("Avg Pace",
+                avgSecPerMark + "s/mark" +
+                (avgSecPerMark > 60 ? " " + SYMBOLS.CROSS : " " + SYMBOLS.CHECK));
             html += '</div>';
 
-            // New masteries
+            // ---- NEW MASTERIES ----
             if (sd.newMasteries && sd.newMasteries.length > 0) {
                 html += '<div class="summary-section summary-masteries">';
                 html += '<h3>' + SYMBOLS.PARTY + ' New Masteries!</h3>';
@@ -3533,7 +3571,64 @@ var StudyUI = {
                 html += '</div></div>';
             }
 
-            // Topic breakdown
+            // ---- PER-QUESTION BREAKDOWN ----
+            if (timings.length > 0) {
+                html += '<div class="summary-section">';
+                html += '<h3>' + SYMBOLS.CLOCK + ' Question Breakdown</h3>';
+                timings.forEach(function(t, idx) {
+                    var pct = t.allowedSec > 0 ?
+                        Math.round((t.actualSec / t.allowedSec) * 100) : 0;
+                    var timeClass = t.overtime ? "q-overtime" : "q-undertime";
+                    var correctAll = t.partsCorrect === t.partsTotal;
+                    var resultIcon = correctAll ? SYMBOLS.CHECK : SYMBOLS.CROSS;
+                    var resultClass = correctAll ? "q-correct" : "q-error";
+
+                    html += '<div class="q-timing-row">';
+                    html += '<span class="q-timing-num">' + (idx + 1) + '</span>';
+                    html += '<span class="q-timing-name">' +
+                        StudyUI._escapeHtml(t.reference) + '</span>';
+                    html += '<span class="q-timing-result ' + resultClass + '">' +
+                        resultIcon + ' ' + t.partsCorrect + '/' + t.partsTotal + '</span>';
+                    html += '<span class="q-timing-marks">' + t.totalMarks + ' mk</span>';
+                    html += '<span class="q-timing-time ' + timeClass + '">' +
+                        StudyUI._formatTime(t.actualSec) +
+                        ' / ' + StudyUI._formatTime(t.allowedSec) + '</span>';
+
+                    // Time bar
+                    var barPct = Math.min(pct, 200);
+                    var barClass = t.overtime ? "bar-danger" :
+                        pct > 80 ? "bar-warning" : "bar-success";
+                    html += '<div class="q-timing-bar">';
+                    html += '<div class="q-timing-bar-fill ' + barClass +
+                        '" style="width:' + Math.min(barPct, 100) + '%"></div>';
+                    if (barPct > 100) {
+                        html += '<div class="q-timing-bar-over" style="width:' +
+                            Math.min(barPct - 100, 100) + '%"></div>';
+                    }
+                    html += '</div>';
+
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            // ---- RECOMMENDATIONS ----
+            var recommendations = StudyUI._generateRecommendations(sd, timings);
+            if (recommendations.length > 0) {
+                html += '<div class="summary-section summary-recommendations">';
+                html += '<h3>' + SYMBOLS.BOOK + ' Recommendations</h3>';
+                recommendations.forEach(function(rec) {
+                    html += '<div class="recommendation-item">';
+                    html += '<span class="rec-icon">' + rec.icon + '</span>';
+                    html += '<div class="rec-content">';
+                    html += '<div class="rec-title">' + rec.title + '</div>';
+                    html += '<div class="rec-detail">' + rec.detail + '</div>';
+                    html += '</div></div>';
+                });
+                html += '</div>';
+            }
+
+            // ---- TOPIC BREAKDOWN ----
             if (sd.topicBreakdown && Object.keys(sd.topicBreakdown).length > 0) {
                 html += '<div class="summary-section">';
                 html += '<h3>Topic Breakdown</h3>';
@@ -3583,6 +3678,120 @@ var StudyUI = {
     },
 
     /**
+     * Generate study recommendations based on session data.
+     * @private
+     */
+    _generateRecommendations: function(sd, timings) {
+        var recs = [];
+
+        // 1. Identify problem types with errors
+        var failedPTs = {};
+        var q = StudyUI.currentQuestion; // might be null at end
+        timings.forEach(function(t) {
+            if (t.partsCorrect < t.partsTotal) {
+                t.problemTypes.forEach(function(pt) {
+                    if (!failedPTs[pt]) failedPTs[pt] = 0;
+                    failedPTs[pt]++;
+                });
+            }
+        });
+        var failedPTList = Object.keys(failedPTs);
+        if (failedPTList.length > 0) {
+            // Sort by frequency of failure
+            failedPTList.sort(function(a, b) { return failedPTs[b] - failedPTs[a]; });
+            var topFailed = failedPTList.slice(0, 3);
+            recs.push({
+                icon: SYMBOLS.CROSS,
+                title: "Revise these problem types",
+                detail: topFailed.map(function(pt) {
+                    return StudyUI._escapeHtml(pt);
+                }).join(", ") + ". Consider using \"Another like this\" to get extra practice."
+            });
+        }
+
+        // 2. Timing - went overtime on questions
+        var overtimeQs = timings.filter(function(t) { return t.overtime; });
+        if (overtimeQs.length > 0) {
+            var slowPTs = {};
+            overtimeQs.forEach(function(t) {
+                t.problemTypes.forEach(function(pt) {
+                    if (!slowPTs[pt]) slowPTs[pt] = 0;
+                    slowPTs[pt]++;
+                });
+            });
+            var slowPTList = Object.keys(slowPTs).slice(0, 3);
+            recs.push({
+                icon: SYMBOLS.CLOCK,
+                title: "Work on speed for " + overtimeQs.length +
+                    " question" + (overtimeQs.length > 1 ? "s" : ""),
+                detail: "You went over time on: " +
+                    slowPTList.map(function(pt) {
+                        return StudyUI._escapeHtml(pt);
+                    }).join(", ") +
+                    ". In the exam you have about 1 minute per mark."
+            });
+        }
+
+        // 3. Overall accuracy
+        if (sd.accuracyPercent < 50) {
+            recs.push({
+                icon: SYMBOLS.BOOK,
+                title: "Review fundamentals",
+                detail: "Your accuracy was below 50%. Consider reviewing the theory and worked examples before attempting more practice."
+            });
+        } else if (sd.accuracyPercent >= 80 && overtimeQs.length === 0) {
+            recs.push({
+                icon: SYMBOLS.STAR,
+                title: "Great accuracy and timing!",
+                detail: "You scored well and stayed within the time limit. Try tackling harder questions or new problem types to keep improving."
+            });
+        } else if (sd.accuracyPercent >= 80) {
+            recs.push({
+                icon: SYMBOLS.STAR,
+                title: "Accuracy is strong, focus on speed",
+                detail: "Your understanding is solid but some questions took too long. Practice under timed conditions."
+            });
+        }
+
+        // 4. Topics with low accuracy
+        if (sd.topicBreakdown) {
+            var weakTopics = [];
+            Object.keys(sd.topicBreakdown).forEach(function(topic) {
+                var tb = sd.topicBreakdown[topic];
+                if (tb.attempted >= 2) {
+                    var pct = Math.round((tb.correct / tb.attempted) * 100);
+                    if (pct < 50) {
+                        weakTopics.push(topic);
+                    }
+                }
+            });
+            if (weakTopics.length > 0) {
+                recs.push({
+                    icon: SYMBOLS.GRAPH,
+                    title: "Weak topic" + (weakTopics.length > 1 ? "s" : "") +
+                        " identified",
+                    detail: "You scored below 50% on: " +
+                        weakTopics.map(function(t) {
+                            return StudyUI._escapeHtml(t);
+                        }).join(", ") + ". Focus your next session on these areas."
+                });
+            }
+        }
+
+        // 5. Guided solution usage
+        if (sd.guidedSolutionAccesses > 0) {
+            recs.push({
+                icon: SYMBOLS.LIGHTNING,
+                title: "Walkthrough used " + sd.guidedSolutionAccesses + " time" +
+                    (sd.guidedSolutionAccesses > 1 ? "s" : ""),
+                detail: "That's fine for learning! Try the same problem types again next session without the walkthrough."
+            });
+        }
+
+        return recs;
+    },
+
+    /**
      * Return to the study tab home screen.
      */
     returnToHome: function() {
@@ -3595,6 +3804,126 @@ var StudyUI = {
         }
         UI.refreshStudyTab();
         window.scrollTo(0, 0);
+    },
+
+    // ---- TIMER METHODS ----
+
+    /**
+     * Format seconds as MM:SS.
+     * @private
+     */
+    _formatTime: function(seconds) {
+        var absSeconds = Math.abs(Math.floor(seconds));
+        var m = Math.floor(absSeconds / 60);
+        var s = absSeconds % 60;
+        var prefix = seconds < 0 ? "+" : "";
+        return prefix + m + ":" + (s < 10 ? "0" : "") + s;
+    },
+
+    /**
+     * Start the question countdown timer.
+     * @private
+     */
+    _startQuestionTimer: function(totalMarks) {
+        // Clear any existing timer
+        if (StudyUI._questionTimer && StudyUI._questionTimer.interval) {
+            clearInterval(StudyUI._questionTimer.interval);
+        }
+
+        var allowedSec = totalMarks * 60;
+        StudyUI._questionTimer = {
+            interval: null,
+            startTime: Date.now(),
+            allowedSeconds: allowedSec,
+            elapsed: 0,
+            overtime: false
+        };
+
+        StudyUI._questionTimer.interval = setInterval(function() {
+            var elapsed = Math.floor((Date.now() - StudyUI._questionTimer.startTime) / 1000);
+            StudyUI._questionTimer.elapsed = elapsed;
+            var remaining = StudyUI._questionTimer.allowedSeconds - elapsed;
+
+            var displayEl = document.getElementById("timer-display");
+            var timerEl = document.getElementById("question-timer");
+            if (!displayEl || !timerEl) return;
+
+            if (remaining > 0) {
+                // Counting down
+                displayEl.textContent = StudyUI._formatTime(remaining);
+                StudyUI._questionTimer.overtime = false;
+                timerEl.classList.remove("timer-overtime", "timer-warning");
+                if (remaining <= 60) {
+                    timerEl.classList.add("timer-warning");
+                }
+            } else {
+                // Overtime - count up
+                displayEl.textContent = "+" + StudyUI._formatTime(-remaining);
+                StudyUI._questionTimer.overtime = true;
+                timerEl.classList.remove("timer-warning");
+                timerEl.classList.add("timer-overtime");
+            }
+        }, 1000);
+    },
+
+    /**
+     * Stop the question timer and record timing data.
+     * @private
+     */
+    _stopQuestionTimer: function() {
+        if (!StudyUI._questionTimer) return;
+        if (StudyUI._questionTimer.interval) {
+            clearInterval(StudyUI._questionTimer.interval);
+            StudyUI._questionTimer.interval = null;
+        }
+
+        var elapsed = Math.floor((Date.now() - StudyUI._questionTimer.startTime) / 1000);
+        StudyUI._questionTimer.elapsed = elapsed;
+
+        // Record timing for session summary
+        var q = StudyUI.currentQuestion;
+        if (q) {
+            var pts = [];
+            if (q.parts) {
+                q.parts.forEach(function(p) {
+                    if (p.problemType && pts.indexOf(p.problemType) === -1) {
+                        pts.push(p.problemType);
+                    }
+                });
+            }
+            StudyUI._questionTimings.push({
+                filename: StudyUI.currentFilename,
+                reference: q.questionReference || StudyUI.currentFilename,
+                totalMarks: q.totalMarks || 0,
+                allowedSec: StudyUI._questionTimer.allowedSeconds,
+                actualSec: elapsed,
+                overtime: elapsed > StudyUI._questionTimer.allowedSeconds,
+                partsCorrect: 0,  // updated later when results recorded
+                partsTotal: q.parts ? q.parts.length : 0,
+                problemTypes: pts
+            });
+        }
+
+        // Freeze the timer display
+        var timerEl = document.getElementById("question-timer");
+        if (timerEl) timerEl.classList.add("timer-stopped");
+    },
+
+    /**
+     * Update the last timing entry with correctness data after assessment.
+     * Called from _recordResultsIfNeeded.
+     * @private
+     */
+    _updateLastTiming: function() {
+        if (StudyUI._questionTimings.length === 0) return;
+        var last = StudyUI._questionTimings[StudyUI._questionTimings.length - 1];
+        if (last.filename !== StudyUI.currentFilename) return;
+
+        var correct = 0;
+        Object.keys(StudyUI.partResults).forEach(function(label) {
+            if (StudyUI.partResults[label].correct) correct++;
+        });
+        last.partsCorrect = correct;
     },
 
     // ---- UTILITY METHODS ----
