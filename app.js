@@ -2174,7 +2174,7 @@ var StudyUI = {
             if (focusBtn) wrongListOnly = focusBtn.getAttribute("data-value") === "wrongonly";
         }
 
-        // Estimate question count from time: ~1 minute per mark
+        // Estimate question count from time: ~35s per mark
         var goal = StudyUI.estimateQuestions(minutes, sectionFilter);
 
         // Hide start screen, show question area
@@ -2196,7 +2196,7 @@ var StudyUI = {
 
     /**
      * Estimate how many questions fit in a given number of minutes.
-     * Uses ~1 minute per mark. Considers section filter.
+     * Uses ~35s per mark. Considers section filter.
      */
     estimateQuestions: function(minutes, sectionFilter) {
         var available = QuestionEngine.getAvailableQuestions();
@@ -2219,8 +2219,8 @@ var StudyUI = {
         });
         var avgMarks = totalMarks / keys.length;
 
-        // ~1 minute per mark
-        var estimated = Math.round(minutes / avgMarks);
+        // ~35 seconds per mark on average
+        var estimated = Math.round((minutes * 60) / (avgMarks * 35));
         // Clamp to at least 1 and at most available questions
         return Math.max(1, Math.min(estimated, keys.length));
     },
@@ -2330,7 +2330,9 @@ var StudyUI = {
         html += '</div>';
 
         // Question timer
-        var allowedSec = (q.totalMarks || 5) * 60;
+        // Question timer: context = 20s + 40s/mark, calculation = 10s + 30s/mark
+        var hasContext = q.questionStimulus && q.questionStimulus.length > 0;
+        var allowedSec = hasContext ? (25 + (q.totalMarks || 5) * 50) : (20 + (q.totalMarks || 5) * 35);
         html += '<div class="question-timer" id="question-timer">';
         html += '<span class="timer-icon">' + SYMBOLS.CLOCK + '</span>';
         html += '<span class="timer-display" id="timer-display">' +
@@ -2440,7 +2442,7 @@ var StudyUI = {
         UI.renderMath(area);
 
         // Start question timer
-        StudyUI._startQuestionTimer(q.totalMarks || 5);
+        StudyUI._startQuestionTimer(allowedSec);
 
         // Check session duration for break reminder
         StudyUI._checkDurationReminder();
@@ -3556,7 +3558,7 @@ var StudyUI = {
             html += StudyUI._summaryCard("Total Time", totalTimeMin + " min");
             html += StudyUI._summaryCard("Avg Pace",
                 avgSecPerMark + "s/mark" +
-                (avgSecPerMark > 60 ? " " + SYMBOLS.CROSS : " " + SYMBOLS.CHECK));
+                (avgSecPerMark > 40 ? " " + SYMBOLS.CROSS : " " + SYMBOLS.CHECK));
             html += '</div>';
 
             // ---- NEW MASTERIES ----
@@ -3728,7 +3730,7 @@ var StudyUI = {
                     slowPTList.map(function(pt) {
                         return StudyUI._escapeHtml(pt);
                     }).join(", ") +
-                    ". In the exam you have about 1 minute per mark."
+                    ". In the exam you have about 30\u201340 seconds per mark."
             });
         }
 
@@ -3824,13 +3826,12 @@ var StudyUI = {
      * Start the question countdown timer.
      * @private
      */
-    _startQuestionTimer: function(totalMarks) {
+    _startQuestionTimer: function(allowedSec) {
         // Clear any existing timer
         if (StudyUI._questionTimer && StudyUI._questionTimer.interval) {
             clearInterval(StudyUI._questionTimer.interval);
         }
 
-        var allowedSec = totalMarks * 60;
         StudyUI._questionTimer = {
             interval: null,
             startTime: Date.now(),
