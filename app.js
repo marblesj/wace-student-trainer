@@ -4277,6 +4277,11 @@ function initApp() {
             if (!firebase.apps.length) {
                 firebase.initializeApp(FIREBASE_CONFIG);
             }
+            // Get Firestore reference early and enable persistence before any reads
+            var earlyDb = firebase.firestore();
+            earlyDb.enablePersistence({ synchronizeTabs: true }).catch(function(err) {
+                console.warn("Firestore persistence:", err.code);
+            });
         }
 
         // Step 3: Check access code

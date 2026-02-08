@@ -51,13 +51,6 @@ var FirebaseSync = {
                 FirebaseSync.auth = firebase.auth();
                 FirebaseSync.classCode = CLASS_CODE || "default";
 
-                // Enable offline persistence for Firestore
-                FirebaseSync.db.enablePersistence({ synchronizeTabs: true })
-                    .catch(function(err) {
-                        // Not critical -- just means no Firestore offline cache
-                        console.warn("FirebaseSync: Persistence not available:", err.code);
-                    });
-
                 // Sign in anonymously (creates a unique device ID)
                 FirebaseSync.auth.signInAnonymously().then(function(credential) {
                     console.log("FirebaseSync: Authenticated (anonymous)");
