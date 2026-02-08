@@ -2343,21 +2343,16 @@ var StudyUI = {
                 StudyUI._escapeHtml(q.questionStimulus) + '</div>';
         }
 
-        // Diagrams (question-level images -- only show actual part diagrams, not page scans)
+        // Diagrams (question-level images)
         if (q.images && q.images.length > 0) {
-            var partImages = q.images.filter(function(img) {
-                var fn = img.filename || img || "";
-                return fn.indexOf("_Part") >= 0 || fn.indexOf("_part") >= 0;
+            html += '<div class="question-diagrams">';
+            q.images.forEach(function(img) {
+                var imgPath = StudyUI._getDiagramPath(img, q._pool);
+                html += '<img src="' + StudyUI._escapeHtml(imgPath) +
+                    '" class="question-diagram" alt="Diagram"' +
+                    ' onerror="this.style.display=\'none\'">';
             });
-            if (partImages.length > 0) {
-                html += '<div class="question-diagrams">';
-                partImages.forEach(function(img) {
-                    var imgPath = StudyUI._getDiagramPath(img, q._pool);
-                    html += '<img src="' + StudyUI._escapeHtml(imgPath) +
-                        '" class="question-diagram" alt="Diagram">';
-                });
-                html += '</div>';
-            }
+            html += '</div>';
         }
 
         // Parts
@@ -2375,19 +2370,14 @@ var StudyUI = {
 
                 // Part-level diagrams
                 if (part.diagramsNeeded && part.diagramsNeeded.length > 0) {
-                    var partDiags = part.diagramsNeeded.filter(function(d) {
-                        var fn = d.filename || d || "";
-                        return fn.indexOf("_Part") >= 0 || fn.indexOf("_part") >= 0;
+                    html += '<div class="part-diagrams">';
+                    part.diagramsNeeded.forEach(function(d) {
+                        var dPath = StudyUI._getDiagramPath(d, q._pool);
+                        html += '<img src="' + StudyUI._escapeHtml(dPath) +
+                            '" class="question-diagram" alt="Diagram"' +
+                            ' onerror="this.style.display=\'none\'">';
                     });
-                    if (partDiags.length > 0) {
-                        html += '<div class="part-diagrams">';
-                        partDiags.forEach(function(d) {
-                            var dPath = StudyUI._getDiagramPath(d, q._pool);
-                            html += '<img src="' + StudyUI._escapeHtml(dPath) +
-                                '" class="question-diagram" alt="Diagram">';
-                        });
-                        html += '</div>';
-                    }
+                    html += '</div>';
                 }
                 html += '</div>';
             });
@@ -2541,7 +2531,7 @@ var StudyUI = {
             if (part.originalSolution && part.originalSolution.length > 0) {
                 html += '<div class="solution-lines" id="sol-lines-' + partIdx + '">';
                 part.originalSolution.forEach(function(line, lineIdx) {
-                    if (!line.shown) return;
+                    if (line.shown === false) return;
                     html += '<div class="solution-line" data-line="' + (lineIdx + 1) + '">';
                     html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
                     html += '<span class="line-text">' +
@@ -2591,7 +2581,7 @@ var StudyUI = {
                 ' went wrong:</div>';
             if (part.originalSolution) {
                 part.originalSolution.forEach(function(line, lineIdx) {
-                    if (!line.shown) return;
+                    if (line.shown === false) return;
                     html += '<div class="error-line-option" ' +
                         'onclick="StudyUI.selectErrorLine(' + partIdx + ', ' +
                         (lineIdx + 1) + ')">';
@@ -2800,7 +2790,7 @@ var StudyUI = {
         var totalLines = 0;
         if (part.originalSolution) {
             part.originalSolution.forEach(function(l) {
-                if (l.shown) totalLines++;
+                if (l.shown !== false) totalLines++;
             });
         }
         var totalCriteria = part.marking ? part.marking.length : 0;
@@ -3814,7 +3804,7 @@ var DashboardUI = {
                 if (!part || !part.originalSolution) return;
 
                 var totalLines = part.originalSolution.filter(function(l) {
-                    return l.shown;
+                    return l.shown !== false;
                 }).length;
                 if (totalLines === 0) return;
 
