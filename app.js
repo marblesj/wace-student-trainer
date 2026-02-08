@@ -2343,15 +2343,21 @@ var StudyUI = {
                 StudyUI._escapeHtml(q.questionStimulus) + '</div>';
         }
 
-        // Diagrams (question-level images)
+        // Diagrams (question-level images -- only show actual part diagrams, not page scans)
         if (q.images && q.images.length > 0) {
-            html += '<div class="question-diagrams">';
-            q.images.forEach(function(img) {
-                var imgPath = StudyUI._getDiagramPath(img, q._pool);
-                html += '<img src="' + StudyUI._escapeHtml(imgPath) +
-                    '" class="question-diagram" alt="Diagram">';
+            var partImages = q.images.filter(function(img) {
+                var fn = img.filename || img || "";
+                return fn.indexOf("_Part") >= 0 || fn.indexOf("_part") >= 0;
             });
-            html += '</div>';
+            if (partImages.length > 0) {
+                html += '<div class="question-diagrams">';
+                partImages.forEach(function(img) {
+                    var imgPath = StudyUI._getDiagramPath(img, q._pool);
+                    html += '<img src="' + StudyUI._escapeHtml(imgPath) +
+                        '" class="question-diagram" alt="Diagram">';
+                });
+                html += '</div>';
+            }
         }
 
         // Parts
@@ -2369,13 +2375,19 @@ var StudyUI = {
 
                 // Part-level diagrams
                 if (part.diagramsNeeded && part.diagramsNeeded.length > 0) {
-                    html += '<div class="part-diagrams">';
-                    part.diagramsNeeded.forEach(function(d) {
-                        var dPath = StudyUI._getDiagramPath(d, q._pool);
-                        html += '<img src="' + StudyUI._escapeHtml(dPath) +
-                            '" class="question-diagram" alt="Diagram">';
+                    var partDiags = part.diagramsNeeded.filter(function(d) {
+                        var fn = d.filename || d || "";
+                        return fn.indexOf("_Part") >= 0 || fn.indexOf("_part") >= 0;
                     });
-                    html += '</div>';
+                    if (partDiags.length > 0) {
+                        html += '<div class="part-diagrams">';
+                        partDiags.forEach(function(d) {
+                            var dPath = StudyUI._getDiagramPath(d, q._pool);
+                            html += '<img src="' + StudyUI._escapeHtml(dPath) +
+                                '" class="question-diagram" alt="Diagram">';
+                        });
+                        html += '</div>';
+                    }
                 }
                 html += '</div>';
             });
