@@ -1088,6 +1088,133 @@ body.dark-theme #welcome-screen {
     color: white;
 }
 
+/* ---- INLINE MARK INDICATORS (new lineRef-based UI) ---- */
+.mark-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 4px var(--space-md) 4px 36px;
+    margin-bottom: 2px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mark-indicator:hover {
+    filter: brightness(0.95);
+}
+
+.mark-indicator .mark-toggle {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: white;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.mark-indicator:active .mark-toggle {
+    transform: scale(0.9);
+}
+
+.mark-indicator .mark-value {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 14px;
+}
+
+.mark-indicator .mark-desc {
+    flex: 1;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+/* Passed state */
+.mark-indicator.mark-passed {
+    background: var(--color-success-light);
+}
+
+.mark-indicator.mark-passed .mark-toggle {
+    background: var(--color-success);
+}
+
+.mark-indicator.mark-passed .mark-desc {
+    color: var(--color-success);
+}
+
+.mark-indicator.mark-passed .mark-value {
+    color: var(--color-success);
+}
+
+/* Failed state */
+.mark-indicator.mark-failed {
+    background: var(--color-danger-light);
+}
+
+.mark-indicator.mark-failed .mark-toggle {
+    background: var(--color-danger);
+}
+
+.mark-indicator.mark-failed .mark-desc {
+    color: var(--color-danger);
+}
+
+.mark-indicator.mark-failed .mark-value {
+    color: var(--color-danger);
+}
+
+/* Part score bar */
+.part-score-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    margin-top: var(--space-sm);
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius);
+    font-size: 0.9rem;
+}
+
+.part-score-bar .score-text {
+    font-weight: 700;
+}
+
+.part-score-bar .score-text.all-correct {
+    color: var(--color-success);
+}
+
+.part-score-bar .score-text.has-errors {
+    color: var(--color-danger);
+}
+
+.part-score-bar .score-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Submit assessment button area */
+.submit-assess-area {
+    text-align: center;
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--border-color);
+}
+
+.submit-assess-area .btn {
+    padding: var(--space-md) var(--space-xl);
+    font-size: 1rem;
+}
+
 
 /* ---- SELF ASSESSMENT ---- */
 .self-assess {

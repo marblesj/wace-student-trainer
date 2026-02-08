@@ -1564,11 +1564,14 @@ function mapErrorToCriteria(errorLine, totalLines, totalCriteria) {
         for (var i = 0; i < totalCriteria; i++) all.push(i);
         return all;
     }
-    var segmentSize = totalLines / totalCriteria;
-    var errorSegment = Math.floor((errorLine - 1) / segmentSize);
-    var clamped = Math.max(0, Math.min(errorSegment, totalCriteria - 1));
+    // Error at line N means lines 1..(N-1) were correct.
+    // Proportion correct = (errorLine - 1) / totalLines
+    // Map that proportion onto the criteria to find the first failed criterion.
+    var correctProportion = (errorLine - 1) / totalLines;
+    var firstFailed = Math.round(correctProportion * totalCriteria);
+    firstFailed = Math.max(0, Math.min(firstFailed, totalCriteria - 1));
     var failed = [];
-    for (var j = clamped; j < totalCriteria; j++) {
+    for (var j = firstFailed; j < totalCriteria; j++) {
         failed.push(j);
     }
     return failed;
@@ -2125,6 +2128,7 @@ var StudyUI = {
     assessedParts: 0,
     totalParts: 0,
     _nextReminderMinutes: 30,   // first reminder at 30 min, then +20 each time
+    _markStates: {},            // inline mark states: { partIdx: [bool, ...] }
 
     /**
      * Initialise study UI event listeners.
@@ -2290,6 +2294,7 @@ var StudyUI = {
         StudyUI.currentFilename = questionInfo.filename;
         StudyUI.currentQuestion = questionInfo.questionData;
         StudyUI.partResults = {};
+        StudyUI._markStates = {};
         StudyUI.guidedAccessedThisQuestion = false;
         StudyUI.assessedParts = 0;
         StudyUI._resultsRecorded = false;
@@ -2488,7 +2493,19 @@ var StudyUI = {
     },
 
     /**
+     * Check if a part has lineRef on all its marking criteria.
+     * @private
+     */
+    _hasLineRefs: function(part) {
+        if (!part.marking || part.marking.length === 0) return false;
+        return part.marking.every(function(m) {
+            return typeof m.lineRef === "number" && m.lineRef > 0;
+        });
+    },
+
+    /**
      * Show the solution (Layer 1 + Layer 2).
+     * Uses inline mark indicators when lineRef is available, falls back to old UI otherwise.
      */
     showSolution: function() {
         var q = StudyUI.currentQuestion;
@@ -2500,6 +2517,14 @@ var StudyUI = {
 
         var solArea = document.getElementById("solution-area");
         if (!solArea) return;
+
+        // Initialize mark states for inline UI
+        StudyUI._markStates = {};
+
+        // Check if ALL parts support inline marks
+        var useInline = q.parts.every(function(part) {
+            return StudyUI._hasLineRefs(part);
+        });
 
         var html = '<div class="solution-container">';
         html += '<h3 class="solution-title">Worked Solution</h3>';
@@ -2520,85 +2545,163 @@ var StudyUI = {
             html += '</div>';
         }
 
-        q.parts.forEach(function(part, partIdx) {
-            html += '<div class="solution-part" data-part-idx="' + partIdx + '">';
-            html += '<h4 class="solution-part-header">Part (' +
-                StudyUI._escapeHtml(part.partLabel) + ') ' +
-                SYMBOLS.BULLET + ' ' + part.partMarks + ' mark' +
-                (part.partMarks !== 1 ? 's' : '') + '</h4>';
+        if (useInline) {
+            // ---- NEW INLINE MARK UI ----
+            q.parts.forEach(function(part, partIdx) {
+                // Initialize mark states (all passed)
+                StudyUI._markStates[partIdx] = [];
 
-            // Numbered solution lines
-            if (part.originalSolution && part.originalSolution.length > 0) {
+                html += '<div class="solution-part" data-part-idx="' + partIdx + '">';
+                html += '<h4 class="solution-part-header">Part (' +
+                    StudyUI._escapeHtml(part.partLabel) + ') ' +
+                    SYMBOLS.BULLET + ' ' + part.partMarks + ' mark' +
+                    (part.partMarks !== 1 ? 's' : '') + '</h4>';
+
+                // Build lineRef map: lineNumber -> [{ mark, markIdx }]
+                var lineMarks = {};
+                if (part.marking) {
+                    part.marking.forEach(function(m, mIdx) {
+                        var lr = m.lineRef;
+                        if (!lineMarks[lr]) lineMarks[lr] = [];
+                        lineMarks[lr].push({ mark: m, markIdx: mIdx });
+                        StudyUI._markStates[partIdx].push(true);
+                    });
+                }
+
+                // Render solution lines with inline mark indicators
                 html += '<div class="solution-lines" id="sol-lines-' + partIdx + '">';
-                part.originalSolution.forEach(function(line, lineIdx) {
-                    if (line.shown === false) return;
-                    html += '<div class="solution-line" data-line="' + (lineIdx + 1) + '">';
-                    html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
-                    html += '<span class="line-text">' +
-                        StudyUI._escapeHtml(line.text) + '</span>';
-                    html += '</div>';
-                });
+                if (part.originalSolution) {
+                    part.originalSolution.forEach(function(line, lineIdx) {
+                        if (line.shown === false) return;
+                        var lineNum = lineIdx + 1;
+
+                        html += '<div class="solution-line" data-line="' + lineNum + '">';
+                        html += '<span class="line-number">' + lineNum + '</span>';
+                        html += '<span class="line-text">' +
+                            StudyUI._escapeHtml(line.text) + '</span>';
+                        html += '</div>';
+
+                        // Insert mark indicators that reference this line
+                        if (lineMarks[lineNum]) {
+                            lineMarks[lineNum].forEach(function(entry) {
+                                html += '<div class="mark-indicator mark-passed" ' +
+                                    'id="mark-' + partIdx + '-' + entry.markIdx + '" ' +
+                                    'onclick="StudyUI.toggleMark(' + partIdx + ',' +
+                                    entry.markIdx + ')">';
+                                html += '<span class="mark-toggle">' +
+                                    SYMBOLS.CHECK + '</span>';
+                                html += '<span class="mark-value">' +
+                                    entry.mark.awarded + '</span>';
+                                html += '<span class="mark-desc">' +
+                                    StudyUI._escapeHtml(entry.mark.text) + '</span>';
+                                html += '</div>';
+                            });
+                        }
+                    });
+                }
                 html += '</div>';
-            }
 
-            // Marking criteria
-            if (part.marking && part.marking.length > 0) {
-                html += '<div class="marking-criteria" id="marking-' + partIdx + '">';
-                html += '<div class="marking-header">Marking Criteria</div>';
-                part.marking.forEach(function(m, mIdx) {
-                    html += '<div class="marking-row" data-mark-idx="' + mIdx + '">';
-                    html += '<span class="mark-awarded">' + m.awarded + '</span>';
-                    html += '<span class="mark-text">' +
-                        StudyUI._escapeHtml(m.text) + '</span>';
-                    html += '</div>';
-                });
+                // Part score bar
+                var partTotal = part.partMarks || 0;
+                html += '<div class="part-score-bar" id="part-score-' + partIdx + '">';
+                html += '<span class="score-text all-correct" id="score-text-' +
+                    partIdx + '">' + partTotal + '/' + partTotal + '</span>';
+                html += '<span class="score-hint">tap marks to change</span>';
                 html += '</div>';
-            }
 
-            // Self-assessment buttons (Layer 2)
-            html += '<div class="self-assess" id="assess-' + partIdx + '">';
-            html += '<div class="assess-prompt">How did you go on this part?</div>';
-            html += '<div class="assess-buttons">';
-            html += '<button class="btn btn-correct" ' +
-                'onclick="StudyUI.assessPart(' + partIdx + ', \'correct\')">' +
-                SYMBOLS.CHECK + ' 100% Correct</button>';
-            html += '<button class="btn btn-error" ' +
-                'onclick="StudyUI.assessPart(' + partIdx + ', \'error\')">' +
-                SYMBOLS.CROSS + ' I made an error</button>';
-            html += '</div>';
-            html += '<a href="#" class="unsure-link" ' +
-                'onclick="StudyUI.assessPart(' + partIdx +
-                ', \'unsure\'); return false;">Correct but unsure</a>';
+                html += '</div>'; // .solution-part
+            });
+
+            // Submit assessment button
+            html += '<div class="submit-assess-area" id="submit-assess">';
+            html += '<button class="btn btn-primary btn-large" ' +
+                'onclick="StudyUI.submitAssessment()">' +
+                'Confirm ' + SYMBOLS.ARROW_RIGHT + '</button>';
             html += '</div>';
 
-            // Error line selection (hidden initially)
-            html += '<div class="error-line-select" id="error-select-' + partIdx +
-                '" style="display:none;">';
-            html += '<button class="btn btn-all-wrong" ' +
-                'onclick="StudyUI.selectErrorLine(' + partIdx +
-                ', 1)">Got it completely wrong (0/' + part.partMarks + ')</button>';
-            html += '<div class="error-prompt">Or tap the line where you <strong>first</strong>' +
-                ' went wrong:</div>';
-            if (part.originalSolution) {
-                part.originalSolution.forEach(function(line, lineIdx) {
-                    if (line.shown === false) return;
-                    html += '<div class="error-line-option" ' +
-                        'onclick="StudyUI.selectErrorLine(' + partIdx + ', ' +
-                        (lineIdx + 1) + ')">';
-                    html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
-                    html += '<span class="line-text">' +
-                        StudyUI._escapeHtml(line.text) + '</span>';
+        } else {
+            // ---- OLD UI (fallback for questions without lineRef) ----
+            q.parts.forEach(function(part, partIdx) {
+                html += '<div class="solution-part" data-part-idx="' + partIdx + '">';
+                html += '<h4 class="solution-part-header">Part (' +
+                    StudyUI._escapeHtml(part.partLabel) + ') ' +
+                    SYMBOLS.BULLET + ' ' + part.partMarks + ' mark' +
+                    (part.partMarks !== 1 ? 's' : '') + '</h4>';
+
+                // Numbered solution lines
+                if (part.originalSolution && part.originalSolution.length > 0) {
+                    html += '<div class="solution-lines" id="sol-lines-' + partIdx + '">';
+                    part.originalSolution.forEach(function(line, lineIdx) {
+                        if (line.shown === false) return;
+                        html += '<div class="solution-line" data-line="' +
+                            (lineIdx + 1) + '">';
+                        html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
+                        html += '<span class="line-text">' +
+                            StudyUI._escapeHtml(line.text) + '</span>';
+                        html += '</div>';
+                    });
                     html += '</div>';
-                });
-            }
-            html += '</div>';
+                }
 
-            // Part result display (hidden initially)
-            html += '<div class="part-result" id="result-' + partIdx +
-                '" style="display:none;"></div>';
+                // Marking criteria (separate block)
+                if (part.marking && part.marking.length > 0) {
+                    html += '<div class="marking-criteria" id="marking-' + partIdx + '">';
+                    html += '<div class="marking-header">Marking Criteria</div>';
+                    part.marking.forEach(function(m, mIdx) {
+                        html += '<div class="marking-row" data-mark-idx="' + mIdx + '">';
+                        html += '<span class="mark-awarded">' + m.awarded + '</span>';
+                        html += '<span class="mark-text">' +
+                            StudyUI._escapeHtml(m.text) + '</span>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
 
-            html += '</div>'; // .solution-part
-        });
+                // Self-assessment buttons (Layer 2)
+                html += '<div class="self-assess" id="assess-' + partIdx + '">';
+                html += '<div class="assess-prompt">How did you go on this part?</div>';
+                html += '<div class="assess-buttons">';
+                html += '<button class="btn btn-correct" ' +
+                    'onclick="StudyUI.assessPart(' + partIdx + ', \'correct\')">' +
+                    SYMBOLS.CHECK + ' 100% Correct</button>';
+                html += '<button class="btn btn-error" ' +
+                    'onclick="StudyUI.assessPart(' + partIdx + ', \'error\')">' +
+                    SYMBOLS.CROSS + ' I made an error</button>';
+                html += '</div>';
+                html += '<a href="#" class="unsure-link" ' +
+                    'onclick="StudyUI.assessPart(' + partIdx +
+                    ', \'unsure\'); return false;">Correct but unsure</a>';
+                html += '</div>';
+
+                // Error line selection (hidden initially)
+                html += '<div class="error-line-select" id="error-select-' + partIdx +
+                    '" style="display:none;">';
+                html += '<button class="btn btn-all-wrong" ' +
+                    'onclick="StudyUI.selectErrorLine(' + partIdx +
+                    ', 1)">Got it completely wrong (0/' + part.partMarks + ')</button>';
+                html += '<div class="error-prompt">Or tap the line where you ' +
+                    '<strong>first</strong> went wrong:</div>';
+                if (part.originalSolution) {
+                    part.originalSolution.forEach(function(line, lineIdx) {
+                        if (line.shown === false) return;
+                        html += '<div class="error-line-option" ' +
+                            'onclick="StudyUI.selectErrorLine(' + partIdx + ', ' +
+                            (lineIdx + 1) + ')">';
+                        html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
+                        html += '<span class="line-text">' +
+                            StudyUI._escapeHtml(line.text) + '</span>';
+                        html += '</div>';
+                    });
+                }
+                html += '</div>';
+
+                // Part result display (hidden initially)
+                html += '<div class="part-result" id="result-' + partIdx +
+                    '" style="display:none;"></div>';
+
+                html += '</div>'; // .solution-part
+            });
+        }
 
         // Guided solution trigger (Layer 3)
         html += '<div class="guided-trigger" id="guided-trigger">';
@@ -2672,6 +2775,177 @@ var StudyUI = {
     },
 
     /**
+     * Toggle a mark indicator between passed/failed with cascading.
+     * Clicking a passed mark fails it and all subsequent marks.
+     * Clicking a failed mark passes it and all prior marks.
+     */
+    toggleMark: function(partIdx, markIdx) {
+        var states = StudyUI._markStates[partIdx];
+        if (!states) return;
+
+        var currentState = states[markIdx];
+
+        if (currentState) {
+            // Turning FAILED: this and all subsequent marks fail
+            for (var i = markIdx; i < states.length; i++) {
+                states[i] = false;
+            }
+        } else {
+            // Turning PASSED: this and all prior marks pass
+            for (var i = 0; i <= markIdx; i++) {
+                states[i] = true;
+            }
+        }
+
+        StudyUI._updateMarkIndicators(partIdx);
+        StudyUI._updatePartScore(partIdx);
+    },
+
+    /**
+     * Update mark indicator DOM elements to reflect current states.
+     * @private
+     */
+    _updateMarkIndicators: function(partIdx) {
+        var states = StudyUI._markStates[partIdx];
+        if (!states) return;
+
+        states.forEach(function(passed, mIdx) {
+            var el = document.getElementById("mark-" + partIdx + "-" + mIdx);
+            if (!el) return;
+
+            var toggleEl = el.querySelector(".mark-toggle");
+            if (passed) {
+                el.className = "mark-indicator mark-passed";
+                if (toggleEl) toggleEl.textContent = SYMBOLS.CHECK;
+            } else {
+                el.className = "mark-indicator mark-failed";
+                if (toggleEl) toggleEl.textContent = SYMBOLS.CROSS;
+            }
+        });
+
+        // Update solution line colouring
+        StudyUI._updateLineHighlights(partIdx);
+    },
+
+    /**
+     * Colour solution lines green/red based on first failed mark's lineRef.
+     * @private
+     */
+    _updateLineHighlights: function(partIdx) {
+        var part = StudyUI.currentQuestion.parts[partIdx];
+        if (!part || !part.marking) return;
+
+        var linesContainer = document.getElementById("sol-lines-" + partIdx);
+        if (!linesContainer) return;
+
+        var states = StudyUI._markStates[partIdx];
+        var firstFailedLine = -1;
+        for (var i = 0; i < states.length; i++) {
+            if (!states[i] && part.marking[i] && part.marking[i].lineRef) {
+                firstFailedLine = part.marking[i].lineRef;
+                break;
+            }
+        }
+
+        var lines = linesContainer.querySelectorAll(".solution-line");
+        lines.forEach(function(el) {
+            var lineNum = parseInt(el.getAttribute("data-line"), 10);
+            el.classList.remove("line-correct", "line-error");
+            if (firstFailedLine === -1) {
+                // All passed
+                el.classList.add("line-correct");
+            } else if (lineNum < firstFailedLine) {
+                el.classList.add("line-correct");
+            } else {
+                el.classList.add("line-error");
+            }
+        });
+    },
+
+    /**
+     * Update the part score display based on current mark states.
+     * @private
+     */
+    _updatePartScore: function(partIdx) {
+        var part = StudyUI.currentQuestion.parts[partIdx];
+        if (!part) return;
+
+        var states = StudyUI._markStates[partIdx];
+        var earned = 0;
+        var total = part.partMarks || 0;
+
+        if (part.marking && states) {
+            part.marking.forEach(function(m, mIdx) {
+                if (states[mIdx]) earned += (m.awarded || 0);
+            });
+        }
+
+        var scoreEl = document.getElementById("score-text-" + partIdx);
+        if (scoreEl) {
+            scoreEl.textContent = earned + "/" + total;
+            scoreEl.className = "score-text " +
+                (earned === total ? "all-correct" : "has-errors");
+        }
+    },
+
+    /**
+     * Submit the inline assessment. Derives partResults from mark states,
+     * disables toggles, and shows next question area.
+     */
+    submitAssessment: function() {
+        var q = StudyUI.currentQuestion;
+        if (!q || !q.parts) return;
+
+        // Hide quick-assess and submit button
+        var quickArea = document.getElementById("quick-assess");
+        if (quickArea) quickArea.style.display = "none";
+        var submitArea = document.getElementById("submit-assess");
+        if (submitArea) submitArea.style.display = "none";
+
+        // Derive partResults from mark states
+        q.parts.forEach(function(part, partIdx) {
+            var states = StudyUI._markStates[partIdx];
+            if (!states) return;
+
+            var allPassed = states.every(function(s) { return s; });
+            var failedIndices = [];
+            var firstFailedLine = null;
+
+            states.forEach(function(s, mIdx) {
+                if (!s) {
+                    failedIndices.push(mIdx);
+                    if (firstFailedLine === null && part.marking[mIdx] &&
+                        part.marking[mIdx].lineRef) {
+                        firstFailedLine = part.marking[mIdx].lineRef;
+                    }
+                }
+            });
+
+            StudyUI.partResults[part.partLabel] = {
+                correct: allPassed,
+                correctButUnsure: false,
+                errorAtLine: firstFailedLine,
+                markingCriteriaFailed: failedIndices
+            };
+        });
+
+        // Disable mark toggles (lock in assessment)
+        var indicators = document.querySelectorAll(".mark-indicator");
+        indicators.forEach(function(el) {
+            el.onclick = null;
+            el.style.cursor = "default";
+            el.style.opacity = "0.85";
+        });
+
+        // Hide score hints
+        var hints = document.querySelectorAll(".score-hint");
+        hints.forEach(function(el) { el.style.display = "none"; });
+
+        // Show next area
+        StudyUI._showNextArea();
+    },
+
+    /**
      * Quick-assess ALL parts at once (question-level shortcut).
      * @param {string} mode - "correct" (all parts full marks) or "wrong" (all parts error at line 1)
      */
@@ -2683,19 +2957,39 @@ var StudyUI = {
         var quickArea = document.getElementById("quick-assess");
         if (quickArea) quickArea.style.display = "none";
 
-        q.parts.forEach(function(part, partIdx) {
-            // Skip already-assessed parts
-            if (StudyUI.partResults[part.partLabel]) return;
-
-            if (mode === "correct") {
-                StudyUI.assessPart(partIdx, "correct");
-            } else {
-                // "wrong" -- hide the per-part assess buttons, then mark error at line 1
-                var assessArea = document.getElementById("assess-" + partIdx);
-                if (assessArea) assessArea.style.display = "none";
-                StudyUI.selectErrorLine(partIdx, 1);
-            }
+        // Check if using inline UI
+        var useInline = q.parts.every(function(part) {
+            return StudyUI._hasLineRefs(part);
         });
+
+        if (useInline) {
+            // Set all marks based on mode
+            q.parts.forEach(function(part, partIdx) {
+                var states = StudyUI._markStates[partIdx];
+                if (!states) return;
+                for (var i = 0; i < states.length; i++) {
+                    states[i] = (mode === "correct");
+                }
+                StudyUI._updateMarkIndicators(partIdx);
+                StudyUI._updatePartScore(partIdx);
+            });
+            // Auto-submit
+            StudyUI.submitAssessment();
+        } else {
+            // Old UI behavior
+            q.parts.forEach(function(part, partIdx) {
+                // Skip already-assessed parts
+                if (StudyUI.partResults[part.partLabel]) return;
+
+                if (mode === "correct") {
+                    StudyUI.assessPart(partIdx, "correct");
+                } else {
+                    var assessArea = document.getElementById("assess-" + partIdx);
+                    if (assessArea) assessArea.style.display = "none";
+                    StudyUI.selectErrorLine(partIdx, 1);
+                }
+            });
+        }
     },
 
     /**
