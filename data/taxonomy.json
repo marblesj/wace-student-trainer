@@ -3,19 +3,19 @@
     "Exponential functions": {
       "Exponential Models": {
         "problemTypes": [
-          "Determining parameters of exponential model from two data points",
-          "Exponential model problem",
-          "Finding rate of change by differentiating $Ae^{kt}$",
           "Determining decay constant k from given half-life using logarithms",
-          "Solving for parameter in exponential model with accumulation to meet target condition",
-          "Calculating change using exponential model",
-          "Solving exponential decay model with percentage rate change to meet threshold condition",
-          "Determining parameter from initial condition in exponential rational model",
-          "Interpreting long-term behavior of rate of change in exponential model",
-          "Evaluating exponential model $Ae^{kt}$ at specific time",
           "Solving exponential equation $Ae^{kt}$ = target",
+          "Finding rate of change by differentiating $Ae^{kt}$",
+          "Evaluating exponential model $Ae^{kt}$ at specific time",
+          "Solving exponential decay model with percentage rate change to meet threshold condition",
+          "Determining parameters of exponential model from two data points",
+          "Solving for parameter in exponential model with accumulation to meet target condition",
+          "Interpreting long-term behavior of rate of change in exponential model",
+          "Determining parameter from initial condition in exponential rational model",
+          "Calculating change using exponential model",
           "Finding half-life by solving $Ae^{kt}$ = $A/2$ using logarithms",
-          "Solving exponential equation with accumulation model B = A/(1-$e^{-kT}$)"
+          "Solving exponential equation with accumulation model B = A/(1-$e^{-kT}$)",
+          "Exponential model problem"
         ],
         "questionCount": 27,
         "totalMarks": 0,
@@ -51,10 +51,10 @@
       },
       "Exponential Functions": {
         "problemTypes": [
-          "Exponential function problem",
-          "Finding x-intercepts of exponential function by factorizing and solving",
+          "Finding tangent point by solving $f'(x) = m$ and using point-slope form",
           "Determining constant in tangent line equation from point on line",
-          "Finding tangent point by solving $f'(x) = m$ and using point-slope form"
+          "Finding x-intercepts of exponential function by factorizing and solving",
+          "Exponential function problem"
         ],
         "questionCount": 20,
         "totalMarks": 0,
@@ -125,7 +125,7 @@
           "Finding points of inflection by solving $f''(x) = 0$",
           "Stationary points problem"
         ],
-        "questionCount": 22,
+        "questionCount": 23,
         "totalMarks": 0,
         "questionFiles": [
           "12Methods_WACE_2016_CA_Q13_Complete.json",
@@ -149,7 +149,8 @@
           "12Methods_WAEPSem2_2018_CA_Q15_Complete.json",
           "12Methods_WAEPSem2_2023_CF_Q06_Complete.json",
           "12Methods_WAEPSem2_2025_CA_Q17_Complete.json",
-          "12Methods_WAEPSem2_2025_CF_Q04_Complete.json"
+          "12Methods_WAEPSem2_2025_CF_Q04_Complete.json",
+          "12Methods_GEN_P001_Complete.json"
         ]
       },
       "Kinematics: General": {
@@ -318,7 +319,7 @@
           "Differentiating product of exponential and trigonometric function using product rule",
           "Product rule differentiation"
         ],
-        "questionCount": 20,
+        "questionCount": 19,
         "totalMarks": 0,
         "questionFiles": [
           "12Methods_WACE_2016_CA_Q13_Complete.json",
@@ -337,7 +338,6 @@
           "12Methods_WAEPSem1_2024_CA_Q15_Complete.json",
           "12Methods_WAEPSem2_2016_CA_Q17_Complete.json",
           "12Methods_WAEPSem2_2017_CF_Q04_Complete.json",
-          "12Methods_WAEPSem2_2017_CF_Q05_Complete.json",
           "12Methods_WAEPSem2_2018_CF_Q04_Complete.json",
           "12Methods_WAEPSem2_2025_CF_Q02_Complete.json",
           "12Methods_WAEPSem2_2025_CF_Q03_Complete.json"
@@ -509,6 +509,29 @@
           "12Methods_WAEPSem1_2017_CA_Q10_Complete.json",
           "12Methods_WAEPSem1_2020_CA_Q18_Complete.json",
           "12Methods_WAEPSem1_2024_CA_Q17_Complete.json"
+        ]
+      }
+    },
+    "Applications of integration": {
+      "Kinematics: Integration": {
+        "problemTypes": [
+          "Kinematics: integration problem"
+        ],
+        "questionCount": 2,
+        "totalMarks": 0,
+        "questionFiles": [
+          "12Methods_WAEPSem2_2018_CA_Q16_Complete.json",
+          "12Methods_WAEPSem2_2023_CA_Q19_Complete.json"
+        ]
+      },
+      "Area Calculations": {
+        "problemTypes": [
+          "Deriving area formula using geometry"
+        ],
+        "questionCount": 1,
+        "totalMarks": 0,
+        "questionFiles": [
+          "12Methods_WAEPSem2_2018_CF_Q05_Complete.json"
         ]
       }
     }
@@ -706,7 +729,7 @@
           "Evaluating $a^{kp}$ by using log-exponential inverse relationship",
           "Logarithmic evaluation"
         ],
-        "questionCount": 17,
+        "questionCount": 16,
         "totalMarks": 0,
         "questionFiles": [
           "12Methods_WACE_2016_CF_Q01_Complete.json",
@@ -722,7 +745,6 @@
           "12Methods_WACE_2024_CF_Q05_Complete.json",
           "12Methods_WAEPSem1_2017_CA_Q17_Complete.json",
           "12Methods_WAEPSem2_2016_CA_Q12_Complete.json",
-          "12Methods_WAEPSem2_2017_CF_Q05_Complete.json",
           "12Methods_WAEPSem2_2018_CF_Q06_Complete.json",
           "12Methods_WAEPSem2_2018_CF_Q08_Complete.json",
           "12Methods_WAEPSem2_2025_CA_Q10_Complete.json"
@@ -924,21 +946,21 @@
       "Area Calculations": {
         "problemTypes": [
           "Calculating area bounded by curve, x-axis, and vertical lines using definite integral",
-          "Calculating area using integration",
-          "Calculating area using complement and result from previous part (hence)",
-          "Calculating area under curve using definite integral with ln function",
-          "Calculating area bounded by derivative curve and x-axis using absolute value",
-          "Generalizing area calculation with parameter using definite integral and complement",
-          "Deriving area formula using geometry",
-          "Explaining equivalence of areas under translation",
-          "Writing definite integral for area using inverse function",
           "Calculating area between two curves by splitting at intersection point",
-          "Deriving area function by integration and simplifying (show that proof)",
+          "Calculating area bounded by derivative curve and x-axis using absolute value",
+          "Calculating area under curve using definite integral with ln function",
+          "Calculating area using complement and result from previous part (hence)",
+          "Generalizing area calculation with parameter using definite integral and complement",
           "Calculating area between curve and line using integration",
-          "Calculating area using given regions from graph",
-          "Calculating area between parabola and line using integration"
+          "Writing definite integral for area using inverse function",
+          "Deriving area function by integration and simplifying (show that proof)",
+          "Calculating area between parabola and line using integration",
+          "Explaining equivalence of areas under translation",
+          "Calculating area using integration",
+          "Deriving area formula using geometry",
+          "Calculating area using given regions from graph"
         ],
-        "questionCount": 33,
+        "questionCount": 32,
         "totalMarks": 0,
         "questionFiles": [
           "12Methods_WACE_2016_CA_Q13_Complete.json",
@@ -970,7 +992,6 @@
           "12Methods_WAEPSem2_2017_CF_Q04_Complete.json",
           "12Methods_WAEPSem2_2018_CA_Q18_Complete.json",
           "12Methods_WAEPSem2_2018_CF_Q02_Complete.json",
-          "12Methods_WAEPSem2_2018_CF_Q05_Complete.json",
           "12Methods_WAEPSem2_2023_CA_Q16_Complete.json",
           "12Methods_WAEPSem2_2023_CF_Q07_Complete.json",
           "12Methods_WAEPSem2_2025_CF_Q07_Complete.json"
@@ -1008,14 +1029,14 @@
       },
       "Kinematics: Integration": {
         "problemTypes": [
-          "Kinematics: finding displacement by integrating velocity and evaluating at specific time",
-          "Kinematics: calculating total distance travelled",
           "Kinematics: calculating distance travelled by integrating absolute value of velocity",
           "Kinematics: integrating velocity to find displacement with initial condition",
-          "Kinematics: integration problem",
-          "Kinematics: finding displacement by integrating velocity with initial condition"
+          "Kinematics: calculating total distance travelled",
+          "Kinematics: finding displacement by integrating velocity and evaluating at specific time",
+          "Kinematics: finding displacement by integrating velocity with initial condition",
+          "Kinematics: integration problem"
         ],
-        "questionCount": 16,
+        "questionCount": 14,
         "totalMarks": 0,
         "questionFiles": [
           "12Methods_WACE_2017_CA_Q20_Complete.json",
@@ -1031,9 +1052,7 @@
           "12Methods_WAEPSem1_2020_CF_Q08_Complete.json",
           "12Methods_WAEPSem1_2024_CA_Q11_Complete.json",
           "12Methods_WAEPSem2_2016_CA_Q20_Complete.json",
-          "12Methods_WAEPSem2_2017_CF_Q03_Complete.json",
-          "12Methods_WAEPSem2_2018_CA_Q16_Complete.json",
-          "12Methods_WAEPSem2_2023_CA_Q19_Complete.json"
+          "12Methods_WAEPSem2_2017_CF_Q03_Complete.json"
         ]
       },
       "Integration Techniques": {
@@ -1068,9 +1087,9 @@
       },
       "Kinematics: General": {
         "problemTypes": [
-          "Kinematics: general problem",
           "Kinematics: solving for time when displacement equals target value",
-          "Kinematics: evaluating definite integral of velocity and interpreting as change in displacement"
+          "Kinematics: evaluating definite integral of velocity and interpreting as change in displacement",
+          "Kinematics: general problem"
         ],
         "questionCount": 16,
         "totalMarks": 0,
@@ -1107,7 +1126,7 @@
       },
       "Differentiation": {
         "problemTypes": [
-          "Differentiate a function; integrate the resulting identity to Â‘henceÂ’ find the antiderivative of a related integrand.",
+          "Differentiate a function; integrate the resulting identity to hence find the antiderivative of a related integrand.",
           "Anti-differentiating trigonometric function with linear argument and initial condition",
           "Anti-differentiating $e^{ax}$ with initial condition to find function value",
           "Anti-differentiating $xe^{x^2}$ by recognition with initial condition",
@@ -1189,7 +1208,7 @@
       },
       "Graph Sketching": {
         "problemTypes": [
-          "Sketching accumulation function A(x) = âˆ«[a to x] f(t)dt from graph of f"
+          "Sketching accumulation function A(x) = â«[a to x] f(t)dt from graph of f"
         ],
         "questionCount": 1,
         "totalMarks": 0,
@@ -1365,7 +1384,7 @@
         "problemTypes": [
           "Determining parameters of linear transformation from given distribution properties",
           "Calculating probability from histogram by summing relative frequencies",
-          "Calculating probability P(a â‰¤ X â‰¤ b) from histogram",
+          "Calculating probability P(a â¤ X â¤ b) from histogram",
           "Calculating probability of independent events occurring consecutively",
           "Finding median by solving integral equation for continuous RV",
           "Calculating conditional probability for continuous random variable",
@@ -1400,7 +1419,7 @@
       },
       "Integration Techniques": {
         "problemTypes": [
-          "Calculating probability P(X â‰¥ k) by integrating PDF",
+          "Calculating probability P(X â¥ k) by integrating PDF",
           "Determining equation of pdf from graph and integrating to find probability",
           "Finding probability using complement and piecewise pdf integration",
           "Calculating probability for continuous random variable by integration"
@@ -1449,7 +1468,7 @@
     "Normal distributions": {
       "General/Other": {
         "problemTypes": [
-          "Determining $\\mu$ and $\\sigma$Âƒ from two given probabilities using simultaneous equations",
+          "Determining $\\mu$ and $\\sigma$ from two given probabilities using simultaneous equations",
           "Interpreting range in terms of standard deviations using empirical rule",
           "Finding value for specified percentage using empirical rule (68-95-99.7)",
           "Finding parameter value to achieve target tail probability",
@@ -1632,9 +1651,9 @@
         "problemTypes": [
           "Calculating expected profit/loss from discrete random variable with cost structure",
           "Calculating probability using probability distribution",
-          "Calculating P(a â‰¤ X â‰¤ b) from CDF",
-          "Calculating P(a â‰¤ X â‰¤ b) from probability distribution or CDF",
-          "Calculating conditional probability P(X=a | Xâ‰¤b) for discrete RV",
+          "Calculating P(a â¤ X â¤ b) from CDF",
+          "Calculating P(a â¤ X â¤ b) from probability distribution or CDF",
+          "Calculating conditional probability P(X=a | Xâ¤b) for discrete RV",
           "Calculating probability"
         ],
         "questionCount": 6,
@@ -1674,7 +1693,7 @@
           "Completing probability distribution table for binomial distribution",
           "Calculating expected value and variance of binomial distribution",
           "Calculating binomial probability after determining p from normal distribution",
-          "Calculating binomial probability P(X â‰¥ k)",
+          "Calculating binomial probability P(X â¥ k)",
           "Finding n and p from mean and variance of binomial, then evaluating a probability",
           "Calculating binomial probability",
           "Probability of independent events"
