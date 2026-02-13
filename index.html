@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WACE Methods Study Trainer</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- MathJax v3 - loaded from CDN -->
+    <link rel="stylesheet" href="trainer_data/style.css">
+    <!-- MathJax v3 - loaded from local bundle for offline use -->
     <script>
         window.MathJax = {
             tex: {
@@ -25,34 +25,40 @@
             }
         };
     </script>
-    <script id="mathjax-script" async
-            src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    <!--
+        MathJax offline bundle: place tex-mml-chtml.js in trainer_data/mathjax/
+        For development/testing, fall back to CDN if local file not found.
+    -->
+    <script id="mathjax-script" src="trainer_data/mathjax/tex-mml-chtml.js"></script>
+    <script>
+        // Fallback: if local MathJax fails, try CDN (online only - for dev testing)
+        document.getElementById('mathjax-script').onerror = function() {
+            console.warn('Local MathJax not found, trying CDN fallback...');
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+            s.id = 'mathjax-cdn-fallback';
+            s.onerror = function() {
+                console.error('CDN MathJax also failed to load');
+                window._mathJaxFailed = true;
+            };
+            document.head.appendChild(s);
+        };
+        // Safety net: if after 8 seconds MathJax still is not available,
+        // try CDN one more time (covers file:// edge cases where onerror
+        // does not fire reliably).
+        setTimeout(function() {
+            if (typeof MathJax === 'undefined' && !window._mathJaxFailed &&
+                !document.getElementById('mathjax-cdn-fallback')) {
+                console.warn('MathJax not detected after timeout, trying CDN...');
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+                s.id = 'mathjax-cdn-fallback';
+                document.head.appendChild(s);
+            }
+        }, 8000);
     </script>
 </head>
 <body>
-    <!-- ============================================================ -->
-    <!-- ACCESS CODE SCREEN (shown before welcome, if not yet claimed) -->
-    <!-- ============================================================ -->
-    <div id="access-code-screen" class="screen" style="display:none;">
-        <div class="welcome-container">
-            <div class="welcome-icon" id="access-icon-area"></div>
-            <h1>WACE Methods Study Trainer</h1>
-            <p class="welcome-subtitle">Year 12 Mathematics Methods</p>
-            <div class="welcome-form">
-                <label for="access-code-input">Enter your access code</label>
-                <input type="text" id="access-code-input"
-                       placeholder="e.g. METH-K7X3-P9R2"
-                       maxlength="20" autocomplete="off"
-                       style="text-transform:uppercase;">
-                <p class="welcome-hint">Your teacher will give you a unique code.</p>
-                <div id="access-code-error" style="color:#dc2626;font-size:0.85rem;min-height:1.2em;margin:6px 0;"></div>
-                <button id="access-code-btn" class="btn btn-primary btn-large" disabled>
-                    Continue
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- ============================================================ -->
     <!-- WELCOME SCREEN (first-run only)                              -->
     <!-- ============================================================ -->
@@ -191,18 +197,57 @@
 
             <!-- REVISE TAB -->
             <section id="tab-revise" class="tab-panel">
-                <div class="placeholder-panel">
-                    <h2>Topic Revision</h2>
-                    <p class="placeholder-text">Select a topic to revise. (Coming in Phase S4)</p>
+                <div id="revise-home">
+                    <div class="revise-header">
+                        <h2>Topic Revision</h2>
+                        <p class="revise-subtitle">Choose your mode and section, then pick a topic below.</p>
+                    </div>
+                    <div class="revise-config">
+                        <div class="config-row">
+                            <label>Mode:</label>
+                            <div class="config-toggle-group" id="revise-mode-group">
+                                <button class="config-toggle" data-value="interactive"
+                                        aria-pressed="true">Interactive</button>
+                                <button class="config-toggle" data-value="exam"
+                                        aria-pressed="false">Exam Mode</button>
+                            </div>
+                        </div>
+                        <div class="config-row">
+                            <label>Section:</label>
+                            <div class="config-toggle-group" id="revise-section-group">
+                                <button class="config-toggle" data-value="mix"
+                                        aria-pressed="true">Mix</button>
+                                <button class="config-toggle" data-value="CF"
+                                        aria-pressed="false">Calculator Free</button>
+                                <button class="config-toggle" data-value="CA"
+                                        aria-pressed="false">Calculator Assumed</button>
+                            </div>
+                        </div>
+                        <div class="config-row revise-exam-count" id="revise-exam-count-row" style="display:none;">
+                            <label for="revise-exam-count-input">Number of questions:</label>
+                            <div class="config-slider">
+                                <input type="range" id="revise-exam-count-input" min="3" max="20"
+                                       value="8" step="1">
+                                <span id="revise-exam-count-display" class="config-slider-val">8</span>
+                            </div>
+                            <span class="config-estimate" id="revise-exam-available"></span>
+                        </div>
+                    </div>
                     <div id="topic-tree-container"></div>
+                    <div id="revise-empty-hint" class="revise-no-questions" style="display:none;">
+                        <h3>No topics available yet</h3>
+                        <p>Complete some study sessions first to unlock topics for revision.</p>
+                        <button class="btn btn-primary" onclick="UI.showTab('study')">Start Studying</button>
+                    </div>
                 </div>
+                <div id="revise-question-area" style="display:none;"></div>
             </section>
 
             <!-- PRINT TAB -->
             <section id="tab-print" class="tab-panel">
                 <div class="placeholder-panel">
                     <h2>Print Practice</h2>
-                    <p class="placeholder-text">Generate printable question sets. (Coming in Phase S6)</p>
+                    <p class="placeholder-text">Generate printable question sets.</p>
                 </div>
             </section>
 
@@ -478,19 +523,12 @@
     <input type="file" id="file-input-backup" accept=".json" style="display:none;">
 
     <!-- ============================================================ -->
-    <!-- SCRIPTS (cloud version)                                      -->
-    <!-- Data is loaded via fetch() in app.js -- no script-tag globals -->
+    <!-- SCRIPTS - loaded via script tags (file:// compatible)        -->
+    <!-- All paths relative to this HTML file, pointing into          -->
+    <!-- trainer_data/ subfolder.                                     -->
     <!-- ============================================================ -->
-
-    <!-- Firebase SDK (compat mode, from CDN) -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-
-    <!-- App configuration and modules -->
-    <script src="firebase-config.js"></script>
-    <script src="access-codes.js"></script>
-    <script src="firebase-sync.js"></script>
-    <script src="app.js"></script>
+    <script src="trainer_data/data_bundle.js"></script>
+    <script src="trainer_data/schedule.js"></script>
+    <script src="trainer_data/app.js"></script>
 </body>
 </html>
