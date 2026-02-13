@@ -2516,8 +2516,87 @@ body.dark-theme #welcome-screen {
    PHASE S4: TOPIC REVISION -- Topic Tree
    ============================================================================ */
 
+/* ---- REVISE CONFIG PANEL ---- */
+.revise-config {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-top: 3px solid var(--accent);
+    border-radius: var(--border-radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+    box-shadow: var(--shadow-sm);
+}
+
+.revise-config .config-row {
+    margin-bottom: var(--space-md);
+}
+
+.revise-config .config-row:last-child {
+    margin-bottom: 0;
+}
+
+.revise-config .config-row > label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+}
+
+.config-slider-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--accent-primary);
+    font-size: 1.05rem;
+    min-width: 36px;
+    text-align: center;
+}
+
+/* ---- EXAM MODE: Question-only card (no solution) ---- */
+.exam-question-nav {
+    text-align: center;
+    padding: var(--space-lg) 0;
+}
+
+.exam-question-nav .btn {
+    min-width: 180px;
+}
+
+/* ---- EXAM MODE: Review screen ---- */
+.exam-review-header {
+    text-align: center;
+    padding: var(--space-lg) 0;
+    margin-bottom: var(--space-lg);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.exam-review-header h2 {
+    font-family: 'Crimson Pro', Georgia, serif;
+    margin-bottom: var(--space-sm);
+}
+
+.exam-review-progress {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.exam-review-nav {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    margin-top: var(--space-lg);
+}
+
+.exam-review-nav .btn {
+    min-width: 160px;
+}
+
 .revise-header {
     margin-bottom: var(--space-lg);
+    text-align: center;
 }
 
 .revise-header h2 {

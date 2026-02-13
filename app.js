@@ -35,7 +35,8 @@ var SYMBOLS = {
     SUN:          "\u2600",     // sun (for dark mode toggle)
     MOON:         "\u263E",     // moon (for light mode toggle)
     ARROW_UP:     "\u2191",     // up arrow (improving)
-    REVIEW:       "\u21BB"      // clockwise loop (review due)
+    REVIEW:       "\u21BB",     // clockwise loop (review due)
+    CLIPBOARD:    "\uD83D\uDCCB"  // clipboard (exam review)
 };
 
 // ---- APP CONSTANTS ----
@@ -217,55 +218,6 @@ var DB = {
 
 
 // ============================================================================
-// DATA LOADER (fetch-based JSON loading for cloud hosting)
-// On https://, fetch() works -- no more file:// script-tag workarounds.
-// ============================================================================
-var DataLoader = {
-    questionsData: null,
-    taxonomyData: null,
-    questionIndex: null,
-    scheduleData: null,
-
-    /**
-     * Fetch all data files in parallel. Returns a Promise that resolves
-     * when all data is loaded (or rejects if any critical file fails).
-     */
-    loadAll: function() {
-        return Promise.all([
-            DataLoader._fetchJSON("data/questions.json"),
-            DataLoader._fetchJSON("data/taxonomy.json"),
-            DataLoader._fetchJSON("data/question_index.json"),
-            DataLoader._fetchJSON("data/schedule.json")
-        ]).then(function(results) {
-            DataLoader.questionsData = results[0] || {};
-            DataLoader.taxonomyData = results[1] || {};
-            DataLoader.questionIndex = results[2] || {};
-            DataLoader.scheduleData = results[3] || {};
-            console.log("DataLoader: All data loaded (" +
-                Object.keys(DataLoader.questionsData).length + " questions, " +
-                Object.keys(DataLoader.taxonomyData).length + " topics)");
-            return DataLoader;
-        });
-    },
-
-    /**
-     * Fetch a single JSON file with error handling.
-     */
-    _fetchJSON: function(url) {
-        return fetch(url).then(function(response) {
-            if (!response.ok) {
-                throw new Error("HTTP " + response.status + " loading " + url);
-            }
-            return response.json();
-        }).catch(function(err) {
-            console.warn("DataLoader: Failed to load " + url + " -- " + err.message);
-            return null;
-        });
-    }
-};
-
-
-// ============================================================================
 // QUESTION ENGINE
 // Merges data sources, computes unlocked problem types, provides lookups.
 // ============================================================================
@@ -273,44 +225,29 @@ var QuestionEngine = {
     allQuestions: {},
     taxonomyData: {},
     questionIndex: {},
-    scheduleData: {},
     unlockedProblemTypes: [],
     allProblemTypes: [],
 
     /**
-     * Initialise the engine with data from DataLoader (cloud) or
-     * script-tag globals (offline fallback).
+     * Initialise the engine by merging data bundle + imported questions,
+     * and computing the set of unlocked problem types from the schedule.
      */
-    init: function(loadedData) {
-        // Cloud mode: data passed from DataLoader
-        if (loadedData && loadedData.questionsData) {
-            QuestionEngine.allQuestions = Object.assign({}, loadedData.questionsData);
-            QuestionEngine.taxonomyData = loadedData.taxonomyData || {};
-            QuestionEngine.questionIndex = loadedData.questionIndex || {};
-            QuestionEngine.scheduleData = loadedData.scheduleData || {};
+    init: function() {
+        // Load base data from script-tag globals
+        if (typeof QUESTIONS_DATA !== "undefined") {
+            QuestionEngine.allQuestions = Object.assign({}, QUESTIONS_DATA);
             console.log("QuestionEngine: Loaded " +
-                Object.keys(QuestionEngine.allQuestions).length +
-                " questions from DataLoader");
+                Object.keys(QUESTIONS_DATA).length + " questions from data bundle");
+        } else {
+            console.warn("QuestionEngine: QUESTIONS_DATA not found (data_bundle.js missing?)");
+            QuestionEngine.allQuestions = {};
         }
-        // Offline fallback: read from script-tag globals
-        else {
-            if (typeof QUESTIONS_DATA !== "undefined") {
-                QuestionEngine.allQuestions = Object.assign({}, QUESTIONS_DATA);
-                console.log("QuestionEngine: Loaded " +
-                    Object.keys(QUESTIONS_DATA).length + " questions from data bundle");
-            } else {
-                console.warn("QuestionEngine: No question data found");
-                QuestionEngine.allQuestions = {};
-            }
-            if (typeof TAXONOMY_DATA !== "undefined") {
-                QuestionEngine.taxonomyData = TAXONOMY_DATA;
-            }
-            if (typeof QUESTION_INDEX !== "undefined") {
-                QuestionEngine.questionIndex = QUESTION_INDEX;
-            }
-            if (typeof TAUGHT_SCHEDULE !== "undefined") {
-                QuestionEngine.scheduleData = TAUGHT_SCHEDULE;
-            }
+
+        if (typeof TAXONOMY_DATA !== "undefined") {
+            QuestionEngine.taxonomyData = TAXONOMY_DATA;
+        }
+        if (typeof QUESTION_INDEX !== "undefined") {
+            QuestionEngine.questionIndex = QUESTION_INDEX;
         }
 
         // Extract all known problem types from questions
@@ -346,10 +283,9 @@ var QuestionEngine = {
         today.setHours(0, 0, 0, 0);
         var unlocked = {};
 
-        // Base schedule
-        var sched = QuestionEngine.scheduleData;
-        if (sched && sched.schedule) {
-            sched.schedule.forEach(function(entry) {
+        // Base schedule from schedule.js
+        if (typeof TAUGHT_SCHEDULE !== "undefined" && TAUGHT_SCHEDULE.schedule) {
+            TAUGHT_SCHEDULE.schedule.forEach(function(entry) {
                 var entryDate = new Date(entry.date + "T00:00:00");
                 if (aheadOfSchedule || entryDate <= today) {
                     (entry.problemTypes || []).forEach(function(pt) {
@@ -469,8 +405,7 @@ var QuestionEngine = {
      * Get the schedule info for display purposes.
      */
     getScheduleInfo: function() {
-        var sched = QuestionEngine.scheduleData;
-        if (!sched || !sched.schedule) {
+        if (typeof TAUGHT_SCHEDULE === "undefined") {
             return {
                 className: "Unknown Class",
                 teacherName: "Unknown",
@@ -482,21 +417,21 @@ var QuestionEngine = {
         today.setHours(0, 0, 0, 0);
         var nextUnlock = null;
 
-        if (sched.schedule) {
-            for (var i = 0; i < sched.schedule.length; i++) {
-                var d = new Date(sched.schedule[i].date + "T00:00:00");
+        if (TAUGHT_SCHEDULE.schedule) {
+            for (var i = 0; i < TAUGHT_SCHEDULE.schedule.length; i++) {
+                var d = new Date(TAUGHT_SCHEDULE.schedule[i].date + "T00:00:00");
                 if (d > today) {
-                    nextUnlock = sched.schedule[i];
+                    nextUnlock = TAUGHT_SCHEDULE.schedule[i];
                     break;
                 }
             }
         }
 
         return {
-            className: sched.className || "Unknown Class",
-            teacherName: sched.teacherName || "Unknown",
-            totalEntries: (sched.schedule || []).length,
-            allowAheadOfSchedule: !!sched.allowAheadOfSchedule,
+            className: TAUGHT_SCHEDULE.className || "Unknown Class",
+            teacherName: TAUGHT_SCHEDULE.teacherName || "Unknown",
+            totalEntries: (TAUGHT_SCHEDULE.schedule || []).length,
+            allowAheadOfSchedule: !!TAUGHT_SCHEDULE.allowAheadOfSchedule,
             nextUnlock: nextUnlock
         };
     }
@@ -794,10 +729,6 @@ var MasteryEngine = {
             }
 
             return DB.put(STORE_MASTERY, record).then(function() {
-                // Sync to cloud
-                if (typeof FirebaseSync !== "undefined") {
-                    FirebaseSync.saveMastery(problemType, record);
-                }
                 return record;
             });
         });
@@ -810,10 +741,6 @@ var MasteryEngine = {
         return MasteryEngine.getStatus(problemType).then(function(record) {
             record.guidedSolutionAccessCount =
                 (record.guidedSolutionAccessCount || 0) + 1;
-            // Sync to cloud
-            if (typeof FirebaseSync !== "undefined") {
-                FirebaseSync.saveMastery(problemType, record);
-            }
             return DB.put(STORE_MASTERY, record);
         });
     },
@@ -1117,6 +1044,12 @@ var SessionEngine = {
     sessionGoal: 10,
     startTime: null,
 
+    // Exam mode state
+    examMode: false,          // true = exam mode (no solutions until review)
+    examQueue: [],            // pre-selected questions [{filename, questionData, targetProblemType}]
+    examQueueIndex: 0,        // current position in exam queue
+    examAnswers: [],          // stored question data for review [{filename, questionData, targetProblemType}]
+
     // Categorised problem type lists
     wrongList: [],
     confidenceList: [],
@@ -1159,6 +1092,12 @@ var SessionEngine = {
         SessionEngine.currentQuestion = null;
         SessionEngine.currentFilename = null;
         SessionEngine.newMasteries = [];
+
+        // Reset exam mode state
+        SessionEngine.examMode = !!opts.examMode;
+        SessionEngine.examQueue = [];
+        SessionEngine.examQueueIndex = 0;
+        SessionEngine.examAnswers = [];
 
         // Set section filter on QuestionSelector
         QuestionSelector.sectionFilter = SessionEngine.sectionFilter;
@@ -1377,12 +1316,7 @@ var SessionEngine = {
                 }
             });
 
-            return DB.put(STORE_HISTORY, hist).then(function() {
-                // Sync to cloud
-                if (typeof FirebaseSync !== "undefined") {
-                    FirebaseSync.saveQuestionHistory(filename, hist);
-                }
-            });
+            return DB.put(STORE_HISTORY, hist);
         });
         promises.push(historyPromise);
 
@@ -1486,10 +1420,6 @@ var SessionEngine = {
             console.log("Session saved: " +
                 SessionEngine.sessionData.questionsAttempted + " questions, " +
                 SessionEngine.sessionData.accuracyPercent + "% accuracy");
-            // Sync to cloud
-            if (typeof FirebaseSync !== "undefined") {
-                FirebaseSync.saveSession(SessionEngine.sessionData);
-            }
             return SessionEngine.sessionData;
         });
     },
@@ -1694,7 +1624,7 @@ var UI = {
             });
         }
 
-        // Config toggle groups (section filter, focus filter)
+        // Config toggle groups (section filter, focus filter, revise config)
         var toggleGroups = document.querySelectorAll(".config-toggle-group");
         toggleGroups.forEach(function(group) {
             var buttons = group.querySelectorAll(".config-toggle");
@@ -1709,6 +1639,29 @@ var UI = {
                 });
             });
         });
+
+        // Revise mode toggle: show/hide exam count row
+        var reviseModeGroup = document.getElementById("revise-mode-group");
+        if (reviseModeGroup) {
+            reviseModeGroup.querySelectorAll(".config-toggle").forEach(function(btn) {
+                btn.addEventListener("click", function() {
+                    var countRow = document.getElementById("revise-exam-count-row");
+                    if (countRow) {
+                        countRow.style.display =
+                            (btn.getAttribute("data-value") === "exam") ? "block" : "none";
+                    }
+                });
+            });
+        }
+
+        // Revise exam count slider
+        var reviseCountInput = document.getElementById("revise-exam-count-input");
+        var reviseCountDisplay = document.getElementById("revise-exam-count-display");
+        if (reviseCountInput && reviseCountDisplay) {
+            reviseCountInput.addEventListener("input", function() {
+                reviseCountDisplay.textContent = reviseCountInput.value;
+            });
+        }
 
         // Import/export buttons (Phase S5)
         document.getElementById("btn-import-update").addEventListener("click", function() {
@@ -1842,17 +1795,6 @@ var UI = {
 
         DB.put(STORE_CONFIG, config).then(function() {
             console.log("Config saved for: " + name);
-
-            // Claim access code if access control is active
-            if (typeof AccessControl !== "undefined" && AccessControl.completeClaim) {
-                AccessControl.completeClaim(name);
-            }
-
-            // Sync profile to cloud
-            if (typeof FirebaseSync !== "undefined") {
-                FirebaseSync.saveProfile(config);
-            }
-
             UI.showMainApp(config);
         }).catch(function(err) {
             console.error("Failed to save config:", err);
@@ -2308,6 +2250,294 @@ var StudyUI = {
     },
 
     /**
+     * Load next question in exam mode from the pre-built queue.
+     * @private
+     */
+    _loadExamQuestion: function() {
+        var idx = SessionEngine.examQueueIndex;
+        var queue = SessionEngine.examQueue;
+
+        if (idx >= queue.length) {
+            // All exam questions done -- show review landing
+            StudyUI._showExamReviewLanding();
+            return;
+        }
+
+        var item = queue[idx];
+        SessionEngine.examQueueIndex++;
+        SessionEngine.totalCount++;
+        SessionEngine.currentQuestion = item.questionData;
+        SessionEngine.currentFilename = item.filename;
+
+        // Store for review later
+        SessionEngine.examAnswers.push({
+            filename: item.filename,
+            questionData: item.questionData,
+            targetProblemType: item.targetProblemType,
+            questionNumber: SessionEngine.examQueueIndex
+        });
+
+        var result = {
+            filename: item.filename,
+            questionData: item.questionData,
+            targetProblemType: item.targetProblemType,
+            questionNumber: SessionEngine.examQueueIndex,
+            sessionGoal: queue.length
+        };
+
+        StudyUI.renderQuestion(result);
+    },
+
+    /**
+     * Show the exam review landing page after all questions are answered.
+     * @private
+     */
+    _showExamReviewLanding: function() {
+        var area = document.getElementById(StudyUI._activeAreaId);
+        if (!area) return;
+
+        var total = SessionEngine.examAnswers.length;
+        var html = '<div class="session-summary">';
+        html += '<div class="summary-header">';
+        html += '<div class="summary-icon">' + SYMBOLS.CLIPBOARD + '</div>';
+        html += '<h2>Exam Complete</h2>';
+        html += '</div>';
+        html += '<p style="text-align:center; color:var(--text-secondary); margin-bottom:var(--space-xl);">' +
+            'You answered ' + total + ' question' + (total !== 1 ? 's' : '') +
+            '. Now review each solution and mark how you went.</p>';
+        html += '<div class="summary-actions">';
+        html += '<button class="btn btn-primary btn-large" id="exam-start-review">' +
+            'Review Answers</button>';
+        html += '</div>';
+        html += '</div>';
+
+        area.innerHTML = html;
+
+        document.getElementById("exam-start-review").addEventListener("click", function() {
+            StudyUI._examReviewIndex = 0;
+            StudyUI._inExamReview = true;
+            StudyUI._showExamReviewQuestion(0);
+        });
+    },
+
+    /** Current exam review index */
+    _examReviewIndex: 0,
+
+    /** Whether we're currently in the exam review phase */
+    _inExamReview: false,
+
+    /**
+     * Show a single question + solution for exam review self-assessment.
+     * @private
+     */
+    _showExamReviewQuestion: function(idx) {
+        var answers = SessionEngine.examAnswers;
+        if (idx >= answers.length) {
+            // All reviewed -- show session summary
+            StudyUI._inExamReview = false;
+            StudyUI.showSessionSummary();
+            return;
+        }
+
+        var item = answers[idx];
+        var area = document.getElementById(StudyUI._activeAreaId);
+        if (!area) return;
+
+        // Set current state so assessment recording works
+        StudyUI.currentFilename = item.filename;
+        StudyUI.currentQuestion = item.questionData;
+        StudyUI.partResults = {};
+        StudyUI.guidedAccessedThisQuestion = false;
+        StudyUI.assessedParts = 0;
+        StudyUI._resultsRecorded = false;
+        StudyUI.totalParts = item.questionData.parts ? item.questionData.parts.length : 0;
+        StudyUI._examReviewIndex = idx;
+
+        var q = item.questionData;
+        var html = '';
+
+        // Review header
+        html += '<div class="exam-review-header">';
+        html += '<h2>Review: Question ' + (idx + 1) + ' of ' + answers.length + '</h2>';
+        html += '<div class="exam-review-progress">';
+        var pct = Math.round(((idx) / answers.length) * 100);
+        html += '<div class="progress-bar" style="max-width:300px;margin:var(--space-sm) auto;">' +
+            '<div class="progress-fill" style="width:' + pct + '%"></div></div>';
+        html += '</div></div>';
+
+        // Question card (same as normal render)
+        html += '<div class="question-card">';
+        html += '<div class="question-header">';
+        html += '<h3 class="question-ref">' +
+            StudyUI._escapeHtml(q.questionReference || item.filename) + '</h3>';
+        html += '<div class="question-badges">';
+        html += '<span class="badge badge-section">' +
+            StudyUI._escapeHtml(q.sectionName || "") + '</span>';
+        html += '<span class="badge badge-marks">' + (q.totalMarks || 0) + ' marks</span>';
+        html += '</div></div>';
+
+        if (q.questionStimulus) {
+            html += '<div class="question-stimulus">' +
+                StudyUI._escapeHtml(q.questionStimulus) + '</div>';
+        }
+
+        if (q.images && q.images.length > 0) {
+            html += '<div class="question-diagrams">';
+            q.images.forEach(function(img) {
+                var imgPath = StudyUI._getDiagramPath(img, q._pool);
+                html += '<img src="' + StudyUI._escapeHtml(imgPath) +
+                    '" class="question-diagram" alt="Diagram">';
+            });
+            html += '</div>';
+        }
+
+        if (q.parts) {
+            q.parts.forEach(function(part, pidx) {
+                html += '<div class="question-part" data-part-index="' + pidx + '">';
+                html += '<div class="part-header">';
+                html += '<span class="part-label">(' + StudyUI._escapeHtml(part.partLabel) + ')</span>';
+                html += '<span class="part-marks">[' + part.partMarks + ' mark' +
+                    (part.partMarks !== 1 ? 's' : '') + ']</span>';
+                html += '</div>';
+                html += '<div class="part-text">' + StudyUI._escapeHtml(part.questionText) + '</div>';
+                if (part.diagramsNeeded && part.diagramsNeeded.length > 0) {
+                    html += '<div class="part-diagrams">';
+                    part.diagramsNeeded.forEach(function(d) {
+                        var dPath = StudyUI._getDiagramPath(d, q._pool);
+                        html += '<img src="' + StudyUI._escapeHtml(dPath) +
+                            '" class="question-diagram" alt="Diagram">';
+                    });
+                    html += '</div>';
+                }
+                html += '</div>';
+            });
+        }
+        html += '</div>'; // .question-card
+
+        // Show solution immediately for review
+        html += '<div id="solution-area"></div>';
+
+        area.innerHTML = html;
+        UI.renderMath(area);
+
+        // Immediately show the solution (reuse existing method internals)
+        StudyUI._renderExamReviewSolution(q, idx);
+    },
+
+    /**
+     * Render the solution for exam review with self-assessment.
+     * After all parts assessed, automatically advance.
+     * @private
+     */
+    _renderExamReviewSolution: function(q, reviewIdx) {
+        var solArea = document.getElementById("solution-area");
+        if (!solArea || !q.parts) return;
+
+        var html = '<div class="solution-container">';
+        html += '<h3 class="solution-title">Worked Solution</h3>';
+
+        // Quick assess
+        if (q.parts.length > 0) {
+            var totalMarks = 0;
+            q.parts.forEach(function(p) { totalMarks += (p.partMarks || 0); });
+            html += '<div class="quick-assess" id="quick-assess">';
+            html += '<span class="quick-assess-label">Quick mark:</span>';
+            html += '<button class="btn btn-correct btn-quick" ' +
+                'onclick="StudyUI.assessAllParts(\'correct\')">' +
+                SYMBOLS.CHECK + ' All Correct (' + totalMarks + '/' + totalMarks + ')</button>';
+            html += '<button class="btn btn-error btn-quick" ' +
+                'onclick="StudyUI.assessAllParts(\'wrong\')">' +
+                SYMBOLS.CROSS + ' All Wrong (0/' + totalMarks + ')</button>';
+            html += '</div>';
+        }
+
+        q.parts.forEach(function(part, partIdx) {
+            html += '<div class="solution-part" data-part-idx="' + partIdx + '">';
+            html += '<h4 class="solution-part-header">Part (' +
+                StudyUI._escapeHtml(part.partLabel) + ') ' +
+                SYMBOLS.BULLET + ' ' + part.partMarks + ' mark' +
+                (part.partMarks !== 1 ? 's' : '') + '</h4>';
+
+            if (part.originalSolution && part.originalSolution.length > 0) {
+                html += '<div class="solution-lines" id="sol-lines-' + partIdx + '">';
+                part.originalSolution.forEach(function(line, lineIdx) {
+                    if (!line.shown) return;
+                    html += '<div class="solution-line" data-line="' + (lineIdx + 1) + '">';
+                    html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
+                    html += '<span class="line-text">' + StudyUI._escapeHtml(line.text) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            if (part.marking && part.marking.length > 0) {
+                html += '<div class="marking-criteria" id="marking-' + partIdx + '">';
+                html += '<div class="marking-header">Marking Criteria</div>';
+                part.marking.forEach(function(m, mIdx) {
+                    html += '<div class="marking-row" data-mark-idx="' + mIdx + '">';
+                    html += '<span class="mark-awarded">' + m.awarded + '</span>';
+                    html += '<span class="mark-text">' + StudyUI._escapeHtml(m.text) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '<div class="self-assess" id="assess-' + partIdx + '">';
+            html += '<div class="assess-prompt">How did you go on this part?</div>';
+            html += '<div class="assess-buttons">';
+            html += '<button class="btn btn-correct" ' +
+                'onclick="StudyUI.assessPart(' + partIdx + ', \'correct\')">' +
+                SYMBOLS.CHECK + ' 100% Correct</button>';
+            html += '<button class="btn btn-error" ' +
+                'onclick="StudyUI.assessPart(' + partIdx + ', \'error\')">' +
+                SYMBOLS.CROSS + ' I made an error</button>';
+            html += '</div>';
+            html += '<a href="#" class="unsure-link" ' +
+                'onclick="StudyUI.assessPart(' + partIdx +
+                ', \'unsure\'); return false;">Correct but unsure</a>';
+            html += '</div>';
+
+            html += '<div class="error-line-select" id="error-select-' + partIdx +
+                '" style="display:none;">';
+            html += '<button class="btn btn-all-wrong" ' +
+                'onclick="StudyUI.selectErrorLine(' + partIdx +
+                ', 1)">Got it completely wrong (0/' + part.partMarks + ')</button>';
+            html += '<div class="error-prompt">Or tap the line where you <strong>first</strong>' +
+                ' went wrong:</div>';
+            if (part.originalSolution) {
+                part.originalSolution.forEach(function(line, lineIdx) {
+                    if (!line.shown) return;
+                    html += '<div class="error-line-option" onclick="StudyUI.selectErrorLine(' +
+                        partIdx + ', ' + (lineIdx + 1) + ')">';
+                    html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
+                    html += '<span class="line-text">' + StudyUI._escapeHtml(line.text) + '</span>';
+                    html += '</div>';
+                });
+            }
+            html += '</div>';
+
+            html += '<div class="part-result" id="result-' + partIdx + '"></div>';
+            html += '</div>'; // solution-part
+        });
+
+        html += '</div>'; // solution-container
+
+        // Navigation for review
+        html += '<div class="exam-review-nav" id="exam-review-nav" style="display:none;">';
+        if (reviewIdx < SessionEngine.examAnswers.length - 1) {
+            html += '<button class="btn btn-primary btn-large" id="exam-review-next">' +
+                'Next Question ' + SYMBOLS.ARROW_RIGHT + '</button>';
+        } else {
+            html += '<button class="btn btn-primary btn-large" id="exam-review-finish">' +
+                'Finish Review</button>';
+        }
+        html += '</div>';
+
+        solArea.innerHTML = html;
+        UI.renderMath(solArea);
+    },
+
+    /**
      * Record results for the current question if not already recorded.
      * Called when moving to next question, another-like-this, or session end.
      * @private
@@ -2424,18 +2654,35 @@ var StudyUI = {
             });
         }
 
-        // Show Solution button
-        html += '<div class="show-solution-area">';
-        html += '<p class="solution-prompt">Work through this question on paper, ' +
-            'then check your answer.</p>';
-        html += '<button class="btn btn-primary btn-large" id="show-solution-btn">' +
-            'I\'ve finished ' + SYMBOLS.ARROW_RIGHT + ' Show Solution</button>';
-        html += '</div>';
+        // Show Solution button OR Exam mode navigation
+        if (SessionEngine.examMode) {
+            // Exam mode: no solution, just "Next Question"
+            html += '<div class="exam-question-nav">';
+            html += '<p class="solution-prompt">Work through this question on paper, then move on.</p>';
+            var isLast = SessionEngine.examQueueIndex >= SessionEngine.examQueue.length;
+            if (isLast) {
+                html += '<button class="btn btn-primary btn-large" id="exam-next-btn">' +
+                    'Finish Exam ' + SYMBOLS.ARROW_RIGHT + '</button>';
+            } else {
+                html += '<button class="btn btn-primary btn-large" id="exam-next-btn">' +
+                    'Next Question ' + SYMBOLS.ARROW_RIGHT + '</button>';
+            }
+            html += '</div>';
+        } else {
+            html += '<div class="show-solution-area">';
+            html += '<p class="solution-prompt">Work through this question on paper, ' +
+                'then check your answer.</p>';
+            html += '<button class="btn btn-primary btn-large" id="show-solution-btn">' +
+                'I\'ve finished ' + SYMBOLS.ARROW_RIGHT + ' Show Solution</button>';
+            html += '</div>';
+        }
 
         html += '</div>'; // .question-card
 
-        // Solution area (hidden initially)
-        html += '<div id="solution-area" style="display:none;"></div>';
+        // Solution area (hidden initially) -- only needed in interactive mode
+        if (!SessionEngine.examMode) {
+            html += '<div id="solution-area" style="display:none;"></div>';
+        }
 
         // Session control
         html += '<div class="session-controls" id="session-controls" style="display:none;">';
@@ -2444,12 +2691,22 @@ var StudyUI = {
 
         area.innerHTML = html;
 
-        // Bind show solution button
-        var showBtn = document.getElementById("show-solution-btn");
-        if (showBtn) {
-            showBtn.addEventListener("click", function() {
-                StudyUI.showSolution();
-            });
+        // Bind exam mode next button
+        if (SessionEngine.examMode) {
+            var examNextBtn = document.getElementById("exam-next-btn");
+            if (examNextBtn) {
+                examNextBtn.addEventListener("click", function() {
+                    StudyUI._loadExamQuestion();
+                });
+            }
+        } else {
+            // Bind show solution button
+            var showBtn = document.getElementById("show-solution-btn");
+            if (showBtn) {
+                showBtn.addEventListener("click", function() {
+                    StudyUI.showSolution();
+                });
+            }
         }
 
         // End session button
@@ -3029,6 +3286,35 @@ var StudyUI = {
         var assessed = Object.keys(StudyUI.partResults).length;
         if (assessed < StudyUI.totalParts) return;
 
+        // If we're in exam review mode, show the review nav instead of normal next area
+        if (StudyUI._inExamReview) {
+            // Record results for this question
+            StudyUI._recordResultsIfNeeded().then(function() {
+                var reviewNav = document.getElementById("exam-review-nav");
+                if (reviewNav) {
+                    reviewNav.style.display = "flex";
+
+                    var nextBtn = document.getElementById("exam-review-next");
+                    if (nextBtn) {
+                        nextBtn.addEventListener("click", function() {
+                            StudyUI._showExamReviewQuestion(StudyUI._examReviewIndex + 1);
+                        });
+                    }
+
+                    var finishBtn = document.getElementById("exam-review-finish");
+                    if (finishBtn) {
+                        finishBtn.addEventListener("click", function() {
+                            StudyUI._inExamReview = false;
+                            StudyUI.showSessionSummary();
+                        });
+                    }
+
+                    reviewNav.scrollIntoView({ behavior: "smooth" });
+                }
+            });
+            return;
+        }
+
         // All parts assessed -- show the next area (results recorded on Next click)
         StudyUI._showNextArea();
     },
@@ -3541,7 +3827,36 @@ var ReviseUI = {
      * @param {string} filter - topic, subtopic, or concept name
      * @param {string} level - "topic", "subtopic", or "concept"
      */
+    /**
+     * Start a revision session for a given filter.
+     * Reads mode/section config from the revise config panel.
+     *
+     * @param {string} filter - topic, subtopic, or concept name
+     * @param {string} level - "topic", "subtopic", or "concept"
+     */
     startRevision: function(filter, level) {
+        // Read config from the revise panel
+        var modeGroup = document.getElementById("revise-mode-group");
+        var sectionGroup = document.getElementById("revise-section-group");
+        var isExamMode = false;
+        var sectionFilter = "mix";
+
+        if (modeGroup) {
+            var activeMode = modeGroup.querySelector('[aria-pressed="true"]');
+            if (activeMode) isExamMode = (activeMode.getAttribute("data-value") === "exam");
+        }
+        if (sectionGroup) {
+            var activeSec = sectionGroup.querySelector('[aria-pressed="true"]');
+            if (activeSec) sectionFilter = activeSec.getAttribute("data-value");
+        }
+
+        // For exam mode, read question count
+        var examCount = 8;
+        if (isExamMode) {
+            var countInput = document.getElementById("revise-exam-count-input");
+            if (countInput) examCount = parseInt(countInput.value, 10) || 8;
+        }
+
         // Switch the question area to the revise tab
         StudyUI._activeAreaId = "revise-question-area";
 
@@ -3550,13 +3865,13 @@ var ReviseUI = {
         if (reviseHome) reviseHome.style.display = "none";
         if (reviseArea) reviseArea.style.display = "block";
 
-        // Use a reasonable default goal
-        var goal = 10;
+        var goal = isExamMode ? examCount : 10;
 
         SessionEngine.start("revision", filter, {
             goal: goal,
-            sectionFilter: "mix",
-            wrongListOnly: false
+            sectionFilter: sectionFilter,
+            wrongListOnly: false,
+            examMode: isExamMode
         }).then(function() {
             // Check if there are any questions available
             var totalAvailable = SessionEngine.wrongList.length +
@@ -3571,7 +3886,7 @@ var ReviseUI = {
                     '<h3>No questions available</h3>' +
                     '<p>There are no questions available for "' +
                     StudyUI._escapeHtml(filter) +
-                    '" right now. You may have mastered everything in this area!</p>' +
+                    '" with the current section filter. You may have mastered everything in this area!</p>' +
                     '<button class="btn btn-primary" id="revise-back-btn">' +
                     'Back to Topics</button>' +
                     '</div>';
@@ -3581,9 +3896,160 @@ var ReviseUI = {
                 return;
             }
 
-            StudyUI._nextReminderMinutes = 30;
-            StudyUI.loadNextQuestion();
+            if (isExamMode) {
+                // Pre-build the exam queue with variety across problem types
+                ReviseUI._buildExamQueue(filter, sectionFilter, examCount).then(function(queue) {
+                    if (queue.length === 0) {
+                        reviseArea.innerHTML =
+                            '<div class="revise-no-questions">' +
+                            '<h3>No questions available</h3>' +
+                            '<p>Could not find enough questions for an exam on "' +
+                            StudyUI._escapeHtml(filter) + '".</p>' +
+                            '<button class="btn btn-primary" id="revise-back-btn">' +
+                            'Back to Topics</button>' +
+                            '</div>';
+                        document.getElementById("revise-back-btn").addEventListener("click", function() {
+                            StudyUI.returnToHome();
+                        });
+                        return;
+                    }
+                    SessionEngine.examQueue = queue;
+                    SessionEngine.examQueueIndex = 0;
+                    SessionEngine.examAnswers = [];
+                    SessionEngine.sessionGoal = queue.length;
+                    StudyUI._nextReminderMinutes = 30;
+                    StudyUI._loadExamQuestion();
+                });
+            } else {
+                StudyUI._nextReminderMinutes = 30;
+                StudyUI.loadNextQuestion();
+            }
         });
+    },
+
+    /**
+     * Build an exam queue with maximum variety across problem types.
+     * Uses round-robin across available PTs for the given topic.
+     *
+     * @param {string} topicFilter
+     * @param {string} sectionFilter
+     * @param {number} count - desired number of questions
+     * @returns {Promise<Array>} array of {filename, questionData, targetProblemType}
+     * @private
+     */
+    _buildExamQueue: function(topicFilter, sectionFilter, count) {
+        // Collect all problem types matching the topic filter
+        var matchingPTs = {};
+        var keys = Object.keys(QuestionEngine.allQuestions);
+        keys.forEach(function(k) {
+            var q = QuestionEngine.allQuestions[k];
+            if (!q.parts) return;
+            q.parts.forEach(function(part) {
+                if (part.topic === topicFilter ||
+                    part.subtopic === topicFilter ||
+                    part.conceptCategory === topicFilter ||
+                    part.problemType === topicFilter) {
+                    if (part.problemType) {
+                        matchingPTs[part.problemType] = true;
+                    }
+                }
+            });
+        });
+
+        // Filter to only unlocked PTs
+        var unlockedSet = {};
+        QuestionEngine.unlockedProblemTypes.forEach(function(pt) {
+            unlockedSet[pt] = true;
+        });
+
+        var ptList = Object.keys(matchingPTs).filter(function(pt) {
+            return unlockedSet[pt];
+        });
+
+        if (ptList.length === 0) return Promise.resolve([]);
+
+        // Shuffle the PT list for variety
+        for (var i = ptList.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var temp = ptList[i];
+            ptList[i] = ptList[j];
+            ptList[j] = temp;
+        }
+
+        // Round-robin: distribute count across PTs
+        var ptSlots = []; // array of problem types to fill, in order
+        var idx = 0;
+        for (var s = 0; s < count; s++) {
+            ptSlots.push(ptList[idx % ptList.length]);
+            idx++;
+        }
+
+        // Set section filter for question selection
+        QuestionSelector.sectionFilter = sectionFilter;
+        var served = {};
+
+        // Select one question per slot sequentially
+        var queue = [];
+        var selectNext = function(slotIdx) {
+            if (slotIdx >= ptSlots.length) return Promise.resolve(queue);
+
+            var pt = ptSlots[slotIdx];
+
+            // Find candidates not yet served
+            var candidates = QuestionSelector._findCandidates(pt);
+            candidates = candidates.filter(function(c) {
+                return !served[c.filename];
+            });
+
+            if (candidates.length === 0) {
+                // Skip this slot -- no more questions for this PT
+                return selectNext(slotIdx + 1);
+            }
+
+            return MasteryEngine.getRetryCount(pt).then(function(retryCount) {
+                return DB.getAll(STORE_HISTORY).then(function(histories) {
+                    var histMap = {};
+                    histories.forEach(function(h) { histMap[h.filename] = h; });
+
+                    var now = new Date();
+                    var scored = [];
+                    candidates.forEach(function(c) {
+                        if (served[c.filename]) return;
+                        var score = 0;
+                        var hist = histMap[c.filename];
+                        if (!hist || hist.timesServed === 0) {
+                            score += 10;
+                        } else {
+                            var lastDate = new Date(hist.lastServed + "T00:00:00");
+                            var daysSince = Math.floor((now - lastDate) / 86400000);
+                            if (daysSince > 14) score += 5;
+                            else if (daysSince > 7) score += 2;
+                            else if (daysSince < 3) score -= 5;
+                            if (daysSince < 1) score -= 20;
+                        }
+                        scored.push({ filename: c.filename, questionData: c.questionData, score: score });
+                    });
+
+                    if (scored.length === 0) return selectNext(slotIdx + 1);
+
+                    scored.sort(function(a, b) { return b.score - a.score; });
+                    var topScore = scored[0].score;
+                    var topCandidates = scored.filter(function(s) { return s.score === topScore; });
+                    var pick = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+
+                    served[pick.filename] = true;
+                    queue.push({
+                        filename: pick.filename,
+                        questionData: pick.questionData,
+                        targetProblemType: pt
+                    });
+
+                    return selectNext(slotIdx + 1);
+                });
+            });
+        };
+
+        return selectNext(0);
     },
 
     /**
@@ -4621,9 +5087,8 @@ var DashboardUI = {
         var emptyEl = document.getElementById("dash-timeline-empty");
         if (!el) return;
 
-        var sched = QuestionEngine.scheduleData;
-        if (!sched || !sched.schedule ||
-            sched.schedule.length === 0) {
+        if (typeof TAUGHT_SCHEDULE === "undefined" || !TAUGHT_SCHEDULE.schedule ||
+            TAUGHT_SCHEDULE.schedule.length === 0) {
             el.innerHTML = "";
             if (emptyEl) emptyEl.style.display = "block";
             return;
@@ -4635,7 +5100,7 @@ var DashboardUI = {
         var masteryMap = this._cache.masteryMap;
 
         var html = "";
-        sched.schedule.forEach(function(entry) {
+        TAUGHT_SCHEDULE.schedule.forEach(function(entry) {
             var entryDate = new Date(entry.date + "T00:00:00");
             var isPast = entryDate <= today;
             var isCurrent = false;
@@ -5930,95 +6395,69 @@ var PrintUI = {
 // APP INITIALISATION
 // ============================================================================
 function initApp() {
-    console.log("=== WACE Student Study Trainer v" + APP_VERSION + " (Cloud) ===");
+    console.log("=== WACE Student Study Trainer v" + APP_VERSION + " ===");
     console.log("Initialising...");
 
-    // Step 0: Check access code (if access control is enabled)
-    var accessPromise;
-    if (typeof AccessControl !== "undefined" && AccessControl.init) {
-        accessPromise = AccessControl.init();
-    } else {
-        accessPromise = Promise.resolve({ granted: true });
-    }
+    // Step 1: Initialise question engine (loads data from script-tag globals)
+    QuestionEngine.init();
 
-    accessPromise.then(function(accessResult) {
-        // If access denied, AccessControl shows its own UI -- stop here
-        if (!accessResult.granted) {
-            console.log("Access code required -- waiting for student input");
-            return;
+    // Step 2: Initialise IndexedDB
+    DB.init().then(function() {
+        // Step 3: Merge any imported questions
+        return DB.getAll(STORE_IMPORTED);
+    }).then(function(imported) {
+        QuestionEngine.mergeImportedQuestions(imported);
+
+        // Step 4: Get schedule updates from IndexedDB
+        return DB.getAll(STORE_SCHEDULE_UPDATES);
+    }).then(function(scheduleUpdates) {
+        // Step 5: Check config for ahead-of-schedule setting
+        return DB.get(STORE_CONFIG, "main").then(function(config) {
+            var aheadOfSchedule = config ? !!config.aheadOfScheduleEnabled : false;
+
+            // Step 6: Compute unlocked problem types
+            QuestionEngine.computeUnlocked(scheduleUpdates, aheadOfSchedule);
+
+            return config;
+        });
+    }).then(function(config) {
+        // Step 7: Initialise UI event listeners
+        UI.init();
+        StudyUI.init();
+        PrintUI.init();
+        KeyboardShortcuts.init();
+
+        // Step 8: Show welcome screen or main app
+        if (!config) {
+            console.log("First run detected - showing welcome screen");
+            UI.showWelcomeScreen();
+        } else {
+            console.log("Returning user: " + config.studentName);
+            UI.showMainApp(config);
         }
 
-        // Step 1: Fetch all data files from the server
-        return DataLoader.loadAll().then(function(loadedData) {
+        console.log("Initialisation complete.");
 
-            // Step 2: Initialise question engine with fetched data
-            QuestionEngine.init(loadedData);
-
-            // Step 3: Initialise IndexedDB
-            return DB.init().then(function() {
-                // Step 4: Merge any imported questions
-                return DB.getAll(STORE_IMPORTED);
-            }).then(function(imported) {
-                QuestionEngine.mergeImportedQuestions(imported);
-
-                // Step 5: Get schedule updates from IndexedDB
-                return DB.getAll(STORE_SCHEDULE_UPDATES);
-            }).then(function(scheduleUpdates) {
-                // Step 6: Check config for ahead-of-schedule setting
-                return DB.get(STORE_CONFIG, "main").then(function(config) {
-                    var aheadOfSchedule = config ? !!config.aheadOfScheduleEnabled : false;
-
-                    // Step 7: Compute unlocked problem types
-                    QuestionEngine.computeUnlocked(scheduleUpdates, aheadOfSchedule);
-
-                    return config;
-                });
-            }).then(function(config) {
-                // Step 8: Initialise UI event listeners
-                UI.init();
-                StudyUI.init();
-                PrintUI.init();
-                KeyboardShortcuts.init();
-
-                // Step 9: Initialise Firebase sync (if available)
-                if (typeof FirebaseSync !== "undefined" && FirebaseSync.init) {
-                    FirebaseSync.init(config).catch(function(err) {
-                        console.warn("Firebase sync not available:", err.message);
-                    });
+        // Check MathJax loaded after a delay -- warn user if not
+        setTimeout(function() {
+            if (typeof MathJax === "undefined" || !MathJax.typesetPromise) {
+                console.warn("MathJax not available -- equations will show as raw LaTeX");
+                var banner = document.createElement("div");
+                banner.className = "mathjax-warning";
+                banner.innerHTML = SYMBOLS.CROSS +
+                    " <strong>Math rendering not available.</strong> " +
+                    "Equations will show as text. " +
+                    "To fix: place the MathJax offline bundle in " +
+                    "mathjax/ or connect to the internet." +
+                    '<button onclick="this.parentNode.remove()" ' +
+                    'style="margin-left:12px;cursor:pointer;border:none;' +
+                    'background:none;font-size:1.1em;">&times;</button>';
+                var topBar = document.getElementById("top-bar");
+                if (topBar && topBar.parentNode) {
+                    topBar.parentNode.insertBefore(banner, topBar.nextSibling);
                 }
-
-                // Step 10: Show welcome screen or main app
-                if (!config) {
-                    console.log("First run detected - showing welcome screen");
-                    UI.showWelcomeScreen();
-                } else {
-                    console.log("Returning user: " + config.studentName);
-                    UI.showMainApp(config);
-                }
-
-                console.log("Initialisation complete.");
-
-                // Check MathJax loaded after a delay -- warn user if not
-                setTimeout(function() {
-                    if (typeof MathJax === "undefined" || !MathJax.typesetPromise) {
-                        console.warn("MathJax not available -- equations will show as raw LaTeX");
-                        var banner = document.createElement("div");
-                        banner.className = "mathjax-warning";
-                        banner.innerHTML = SYMBOLS.CROSS +
-                            " <strong>Math rendering not available.</strong> " +
-                            "Equations will show as text. " +
-                            "Check your internet connection and refresh." +
-                            '<button onclick="this.parentNode.remove()" ' +
-                            'style="margin-left:12px;cursor:pointer;border:none;' +
-                            'background:none;font-size:1.1em;">&times;</button>';
-                        var topBar = document.getElementById("top-bar");
-                        if (topBar && topBar.parentNode) {
-                            topBar.parentNode.insertBefore(banner, topBar.nextSibling);
-                        }
-                    }
-                }, 12000);
-            });
-        });
+            }
+        }, 12000);
     }).catch(function(err) {
         console.error("Initialisation failed:", err);
         // Show error with recovery option
