@@ -465,6 +465,15 @@ var WrittenMode = {
         }
     },
 
+    toggleScribble: function(partLabel, btn) {
+        var row = btn.closest(".wm-canvas-row");
+        if (!row) return;
+        var scribble = row.querySelector(".wm-canvas-scribble");
+        if (!scribble) return;
+        scribble.classList.toggle("wm-scribble-hidden");
+        btn.classList.toggle("active");
+    },
+
     checkMarkButton: function() {
         var q = StudyUI.currentQuestion;
         if (!q || !q.parts) return;
@@ -540,6 +549,13 @@ var WrittenMode = {
             '\uD83D\uDDD1 Clear</button>';
         html += '</div>';
 
+        // Rough Working toggle (right-aligned)
+        if (!bgImageUrl) {
+            html += '<div class="wm-toolbar-group" style="margin-left:auto;">';
+            html += '<button class="wm-tool-btn wm-rough-toggle" onclick="WrittenMode.toggleScribble(\'' + partLabel + '\', this)">Rough</button>';
+            html += '</div>';
+        }
+
         html += '</div>'; // toolbar
 
         // Canvas -- stacked pair if bgImageUrl is provided
@@ -566,7 +582,7 @@ var WrittenMode = {
         // Scribble pad -- hidden for draw-on questions (student draws on the image instead)
         if (!bgImageUrl) {
             var scribbleId = "scribble-" + partLabel;
-            html += '<div class="wm-canvas-scribble">';
+            html += '<div class="wm-canvas-scribble wm-scribble-hidden">';
             html += '<div class="wm-canvas-area">';
             html += '<div class="wm-scribble-label">Rough Working</div>';
             html += '<div class="wm-canvas-toolbar">';
