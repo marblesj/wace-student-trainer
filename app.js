@@ -2092,7 +2092,7 @@ var WrittenMode = {
             var cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
             var result = JSON.parse(cleaned);
 
-            // Run SymPy verification (graceful â€” returns null if unavailable)
+            // Run SymPy verification (graceful Ã¢â‚¬â€ returns null if unavailable)
             WrittenMode._runSympyVerification(result).then(function(sympyData) {
                 WrittenMode.displayResults(result, sympyData);
             });
@@ -2289,7 +2289,7 @@ var WrittenMode = {
                     html += '<div class="wm-sol-line ' + lineClass +
                         '" id="wm-sol-line-' + idx + '-' + lineNum + '">';
                     html += '<span class="wm-line-num">' + lineNum + '</span>';
-                    html += '<span>' + StudyUI._escapeHtml(line.text) + '</span>';
+                    html += '<span>' + StudyUI._renderSolutionText(line.text, q._pool) + '</span>';
                     html += arrowHtml;
                     html += '</div>';
                 });
@@ -3220,7 +3220,7 @@ var ExamMode = {
                         html += '<div class="solution-steps">';
                         part.originalSolution.forEach(function(sol) {
                             html += '<div class="solution-line">' +
-                                StudyUI._escapeHtml(sol.text) + '</div>';
+                                StudyUI._renderSolutionText(sol.text) + '</div>';
                         });
                         html += '</div>';
                     }
@@ -3451,7 +3451,7 @@ var ExamMode = {
                                 lineClass += " correct";
                             }
                             html += '<div class="' + lineClass + '">' +
-                                (si + 1) + '. ' + StudyUI._escapeHtml(sol.text) + '</div>';
+                                (si + 1) + '. ' + StudyUI._renderSolutionText(sol.text) + '</div>';
                         });
                         html += '</div>';
                     }
@@ -4604,11 +4604,17 @@ var StudyUI = {
                 StudyUI._escapeHtml(q.questionStimulus) + '</div>';
         }
 
-        // Diagrams (question-level images)
-        if (q.images && q.images.length > 0) {
+        // Diagrams (question-level: stem diagrams only from diagramPlaceholders)
+        var qDiagrams = (q.diagramPlaceholders && q.diagramPlaceholders.question) || [];
+        var stemDiagrams = qDiagrams.filter(function(d) {
+            // Stem diagrams contain "PartStem" or "_Stem", or have no "Part" reference at all
+            return d.indexOf("PartStem") !== -1 || d.indexOf("_Stem") !== -1 ||
+                   d.indexOf("Part") === -1;
+        });
+        if (stemDiagrams.length > 0) {
             html += '<div class="question-diagrams">';
-            q.images.forEach(function(img) {
-                var imgPath = StudyUI._getDiagramPath(img, q._pool);
+            stemDiagrams.forEach(function(diagFile) {
+                var imgPath = StudyUI._getDiagramPath(diagFile, q._pool);
                 html += '<img src="' + StudyUI._escapeHtml(imgPath) +
                     '" class="question-diagram" alt="Diagram">';
             });
@@ -4628,11 +4634,25 @@ var StudyUI = {
                 html += '<div class="part-text">' +
                     StudyUI._escapeHtml(part.questionText) + '</div>';
 
-                // Part-level diagrams
-                if (part.diagramsNeeded && part.diagramsNeeded.length > 0) {
+                // Part-level diagrams (from diagramPlaceholders + diagramsNeeded)
+                var partLabel = part.partLabel;
+                var partDiags = qDiagrams.filter(function(d) {
+                    // Match diagrams referencing this part, e.g. "Parta)_IMG" or "Parta)Stem"
+                    // but exclude stem-only diagrams already shown above
+                    if (d.indexOf("PartStem") !== -1) return false;
+                    if (d.indexOf("_Stem") !== -1 && d.indexOf("Part" + partLabel) === -1) return false;
+                    return d.indexOf("Part" + partLabel + ")") !== -1 ||
+                           d.indexOf("Part" + partLabel + "_") !== -1;
+                });
+                // Also include part.diagramsNeeded.placeholders (rare but exists)
+                var partPlaceholders = (part.diagramsNeeded && part.diagramsNeeded.placeholders) || [];
+                partPlaceholders.forEach(function(p) {
+                    if (partDiags.indexOf(p) === -1) partDiags.push(p);
+                });
+                if (partDiags.length > 0) {
                     html += '<div class="part-diagrams">';
-                    part.diagramsNeeded.forEach(function(d) {
-                        var dPath = StudyUI._getDiagramPath(d, q._pool);
+                    partDiags.forEach(function(diagFile) {
+                        var dPath = StudyUI._getDiagramPath(diagFile, q._pool);
                         html += '<img src="' + StudyUI._escapeHtml(dPath) +
                             '" class="question-diagram" alt="Diagram">';
                     });
@@ -4905,7 +4925,7 @@ var StudyUI = {
                     html += '<div class="solution-line" data-line="' + (lineIdx + 1) + '">';
                     html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
                     html += '<span class="line-text">' +
-                        StudyUI._escapeHtml(line.text) + '</span>';
+                        StudyUI._renderSolutionText(line.text, q._pool) + '</span>';
                     html += '</div>';
                 });
                 html += '</div>';
@@ -4957,7 +4977,7 @@ var StudyUI = {
                         (lineIdx + 1) + ')">';
                     html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
                     html += '<span class="line-text">' +
-                        StudyUI._escapeHtml(line.text) + '</span>';
+                        StudyUI._renderSolutionText(line.text) + '</span>';
                     html += '</div>';
                 });
             }
@@ -5758,6 +5778,35 @@ var StudyUI = {
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;");
+    },
+
+    /**
+     * Render solution text, converting [IMAGE: filename.png] to actual img tags.
+     * @private
+     */
+    _renderSolutionText: function(text, pool) {
+        if (!text) return "";
+        var imgPattern = /\[IMAGE:\s*([^\]]+)\]/g;
+        if (!imgPattern.test(text)) {
+            return StudyUI._escapeHtml(text);
+        }
+        // Reset regex after test
+        imgPattern.lastIndex = 0;
+        var result = "";
+        var lastIndex = 0;
+        var match;
+        while ((match = imgPattern.exec(text)) !== null) {
+            // Escape text before the match
+            result += StudyUI._escapeHtml(text.substring(lastIndex, match.index));
+            // Render the image
+            var filename = match[1].trim();
+            var imgPath = StudyUI._getDiagramPath(filename, pool);
+            result += '<img src="' + StudyUI._escapeHtml(imgPath) +
+                '" class="question-diagram solution-diagram" alt="Solution diagram">';
+            lastIndex = match.index + match[0].length;
+        }
+        result += StudyUI._escapeHtml(text.substring(lastIndex));
+        return result;
     }
 };
 
