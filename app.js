@@ -3200,7 +3200,7 @@ var ExamMode = {
             // Show question text briefly
             if (q.questionStimulus) {
                 html += '<div class="question-stimulus">' +
-                    StudyUI._escapeHtml(q.questionStimulus) + '</div>';
+                    StudyUI._renderSolutionText(q.questionStimulus, q._pool) + '</div>';
             }
 
             // For each part: show solution + self-assessment checkboxes
@@ -3213,7 +3213,7 @@ var ExamMode = {
                     html += '<span class="part-marks">[' + part.partMarks + ' mark' +
                         (part.partMarks !== 1 ? "s" : "") + ']</span></div>';
                     html += '<div class="part-text">' +
-                        StudyUI._escapeHtml(part.questionText) + '</div>';
+                        StudyUI._renderSolutionText(part.questionText, q._pool) + '</div>';
 
                     // Solution
                     if (part.originalSolution && part.originalSolution.length > 0) {
@@ -4598,16 +4598,25 @@ var StudyUI = {
         }
         html += '</div></div>';
 
-        // Question stimulus
+        // Question stimulus (render [IMAGE:] as inline diagrams)
         if (q.questionStimulus) {
             html += '<div class="question-stimulus">' +
-                StudyUI._escapeHtml(q.questionStimulus) + '</div>';
+                StudyUI._renderSolutionText(q.questionStimulus, q._pool) + '</div>';
         }
 
-        // Diagrams (question-level: stem diagrams only from diagramPlaceholders)
+        // Collect [IMAGE:] filenames already rendered inline in stimulus + all part texts
+        var inlineImages = {};
+        StudyUI._collectImageRefs(q.questionStimulus || "", inlineImages);
+        if (q.parts) {
+            q.parts.forEach(function(p) {
+                StudyUI._collectImageRefs(p.questionText || "", inlineImages);
+            });
+        }
+
+        // Diagrams (question-level: stem diagrams NOT already shown inline)
         var qDiagrams = (q.diagramPlaceholders && q.diagramPlaceholders.question) || [];
         var stemDiagrams = qDiagrams.filter(function(d) {
-            // Stem diagrams contain "PartStem" or "_Stem", or have no "Part" reference at all
+            if (inlineImages[d]) return false;
             return d.indexOf("PartStem") !== -1 || d.indexOf("_Stem") !== -1 ||
                    d.indexOf("Part") === -1;
         });
@@ -4632,13 +4641,12 @@ var StudyUI = {
                     (part.partMarks !== 1 ? 's' : '') + ']</span>';
                 html += '</div>';
                 html += '<div class="part-text">' +
-                    StudyUI._escapeHtml(part.questionText) + '</div>';
+                    StudyUI._renderSolutionText(part.questionText, q._pool) + '</div>';
 
-                // Part-level diagrams (from diagramPlaceholders + diagramsNeeded)
+                // Part-level diagrams (from diagramPlaceholders + diagramsNeeded, excluding inline)
                 var partLabel = part.partLabel;
                 var partDiags = qDiagrams.filter(function(d) {
-                    // Match diagrams referencing this part, e.g. "Parta)_IMG" or "Parta)Stem"
-                    // but exclude stem-only diagrams already shown above
+                    if (inlineImages[d]) return false;
                     if (d.indexOf("PartStem") !== -1) return false;
                     if (d.indexOf("_Stem") !== -1 && d.indexOf("Part" + partLabel) === -1) return false;
                     return d.indexOf("Part" + partLabel + ")") !== -1 ||
@@ -5807,6 +5815,19 @@ var StudyUI = {
         }
         result += StudyUI._escapeHtml(text.substring(lastIndex));
         return result;
+    },
+
+    /**
+     * Collect [IMAGE: filename] references from text into a lookup object.
+     * @private
+     */
+    _collectImageRefs: function(text, lookup) {
+        if (!text) return;
+        var imgPattern = /\[IMAGE:\s*([^\]]+)\]/g;
+        var match;
+        while ((match = imgPattern.exec(text)) !== null) {
+            lookup[match[1].trim()] = true;
+        }
     }
 };
 
