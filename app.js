@@ -5029,6 +5029,10 @@ var StudyUI = {
 
         q.parts.forEach(function(part, partIdx) {
             html += '<div class="solution-part" data-part-idx="' + partIdx + '">';
+
+            // Main content (left side when guided is shown)
+            html += '<div class="solution-part-main" id="sol-main-' + partIdx + '">';
+
             html += '<h4 class="solution-part-header">Part (' +
                 StudyUI._escapeHtml(part.partLabel) + ') ' +
                 SYMBOLS.BULLET + ' ' + part.partMarks + ' mark' +
@@ -5104,18 +5108,53 @@ var StudyUI = {
             html += '<div class="part-result" id="result-' + partIdx +
                 '" style="display:none;"></div>';
 
+            // Per-part guided toggle button
+            if (part.guidedSolution) {
+                html += '<div class="guided-part-trigger" id="guided-trigger-' + partIdx + '">';
+                html += '<button class="btn btn-guided-part" ' +
+                    'onclick="StudyUI.showPartGuided(' + partIdx + ')">' +
+                    SYMBOLS.BOOK + ' Show walkthrough</button>';
+                html += '</div>';
+            }
+
+            html += '</div>'; // .solution-part-main
+
+            // Guided solution panel (hidden, right side)
+            if (part.guidedSolution) {
+                html += '<div class="solution-part-guided" id="sol-guided-' + partIdx +
+                    '" style="display:none;"></div>';
+            }
+
             html += '</div>'; // .solution-part
         });
 
-        // Guided solution trigger (Layer 3)
-        html += '<div class="guided-trigger" id="guided-trigger">';
-        html += '<button class="btn btn-secondary btn-large" id="show-guided-btn">' +
-            'I don\'t understand ' + SYMBOLS.ARROW_RIGHT +
-            ' Show me the walkthrough</button>';
-        html += '</div>';
+        // Examiner comment (always visible, after all parts)
+        if (q.examinerComment) {
+            html += '<div class="examiner-comment">';
+            html += '<div class="examiner-label">' + SYMBOLS.GRADUATION +
+                ' Examiner Comment</div>';
+            html += '<p>' + StudyUI._escapeHtml(q.examinerComment) + '</p>';
+            html += '</div>';
 
-        // Guided solution area (hidden)
-        html += '<div id="guided-area" style="display:none;"></div>';
+            // Extract clarification from guided solutions
+            var clarification = "";
+            for (var ci = q.parts.length - 1; ci >= 0; ci--) {
+                if (q.parts[ci].guidedSolution) {
+                    var extracted = StudyUI._extractExaminerContent(q.parts[ci].guidedSolution);
+                    if (extracted.clarification) {
+                        clarification = extracted.clarification;
+                        break;
+                    }
+                }
+            }
+            if (clarification) {
+                html += '<div class="examiner-clarification">';
+                html += '<div class="examiner-clarification-label">' +
+                    SYMBOLS.BOOK + ' This comment clarified</div>';
+                html += '<p>' + StudyUI._escapeHtml(clarification) + '</p>';
+                html += '</div>';
+            }
+        }
 
         // Next question / end session (hidden until all parts assessed)
         html += '<div id="next-question-area" style="display:none;">';
@@ -5134,14 +5173,6 @@ var StudyUI = {
 
         solArea.innerHTML = html;
         solArea.style.display = "block";
-
-        // Bind guided solution button
-        var guidedBtn = document.getElementById("show-guided-btn");
-        if (guidedBtn) {
-            guidedBtn.addEventListener("click", function() {
-                StudyUI.showGuided();
-            });
-        }
 
         // Bind next question button
         var nextBtn = document.getElementById("next-question-btn");
@@ -5560,10 +5591,6 @@ var StudyUI = {
         var nextArea = document.getElementById("next-question-area");
         if (nextArea) nextArea.style.display = "none";
 
-        // Re-show guided trigger if it was hidden
-        var guidedTrigger = document.getElementById("guided-trigger");
-        if (guidedTrigger) guidedTrigger.style.display = "block";
-
         // Re-show the quick-assess buttons if NO parts are now assessed
         if (Object.keys(StudyUI.partResults).length === 0) {
             var quickArea = document.getElementById("quick-assess");
@@ -5757,16 +5784,32 @@ var StudyUI = {
     /**
      * Show the guided solution (Layer 3).
      */
-    showGuided: function() {
+    /**
+     * Show guided walkthrough for a specific part, adjacent to its worked solution.
+     */
+    showPartGuided: function(partIdx) {
         var q = StudyUI.currentQuestion;
-        if (!q || !q.parts) return;
+        if (!q || !q.parts || !q.parts[partIdx]) return;
 
-        var guidedArea = document.getElementById("guided-area");
-        var trigger = document.getElementById("guided-trigger");
-        if (!guidedArea) return;
-        if (trigger) trigger.style.display = "none";
+        var part = q.parts[partIdx];
+        var guidedPanel = document.getElementById("sol-guided-" + partIdx);
+        var trigger = document.getElementById("guided-trigger-" + partIdx);
+        var solPart = guidedPanel ? guidedPanel.closest(".solution-part") : null;
 
-        // Record guided access
+        if (!guidedPanel || !part.guidedSolution) return;
+
+        // Toggle: if already showing, hide it
+        if (guidedPanel.style.display !== "none") {
+            guidedPanel.style.display = "none";
+            if (solPart) solPart.classList.remove("solution-part-expanded");
+            if (trigger) {
+                trigger.querySelector("button").textContent =
+                    SYMBOLS.BOOK + " Show walkthrough";
+            }
+            return;
+        }
+
+        // Record guided access (once per question)
         if (!StudyUI.guidedAccessedThisQuestion) {
             StudyUI.guidedAccessedThisQuestion = true;
             var pts = [];
@@ -5778,45 +5821,54 @@ var StudyUI = {
             SessionEngine.recordGuidedAccess(pts);
         }
 
-        var html = '<div class="guided-container">';
-        html += '<h3 class="guided-title">' + SYMBOLS.BOOK + ' Guided Walkthrough</h3>';
+        // Extract clean guided text (strip examiner note)
+        var extracted = StudyUI._extractExaminerContent(part.guidedSolution);
+        var cleanText = extracted.cleanGuided || part.guidedSolution;
 
-        // Examiner comment
-        if (q.examinerComment) {
-            html += '<div class="examiner-comment">';
-            html += '<div class="examiner-label">' + SYMBOLS.GRADUATION +
-                ' Examiner Comment</div>';
-            html += '<p>' + StudyUI._escapeHtml(q.examinerComment) + '</p>';
-            html += '</div>';
-        }
+        var html = '<div class="guided-panel-content">';
+        html += '<h4 class="guided-panel-title">' + SYMBOLS.BOOK +
+            ' Walkthrough \u2014 Part (' + StudyUI._escapeHtml(part.partLabel) + ')</h4>';
 
-        q.parts.forEach(function(part) {
-            html += '<div class="guided-part">';
-            html += '<h4>Part (' + StudyUI._escapeHtml(part.partLabel) + ')</h4>';
-            if (part.guidedSolution) {
-                // Split on \\n for line breaks
-                var lines = part.guidedSolution.split("\\n");
-                lines.forEach(function(line) {
-                    line = line.trim();
-                    if (line === "") {
-                        html += '<br>';
-                    } else {
-                        html += '<p class="guided-line">' +
-                            StudyUI._escapeHtml(line) + '</p>';
-                    }
-                });
+        // Split on \\n for line breaks
+        var lines = cleanText.split("\\n");
+        lines.forEach(function(line) {
+            line = line.trim();
+            if (line === "" || line === "---") {
+                html += '<br>';
             } else {
-                html += '<p class="text-muted">No guided solution available for this part.</p>';
+                html += '<p class="guided-line">' +
+                    StudyUI._escapeHtml(line) + '</p>';
             }
-            html += '</div>';
         });
 
         html += '</div>';
-        guidedArea.innerHTML = html;
-        guidedArea.style.display = "block";
+        guidedPanel.innerHTML = html;
+        guidedPanel.style.display = "block";
 
-        UI.renderMath(guidedArea);
-        guidedArea.scrollIntoView({ behavior: "smooth" });
+        if (solPart) solPart.classList.add("solution-part-expanded");
+        if (trigger) {
+            trigger.querySelector("button").textContent =
+                SYMBOLS.BOOK + " Hide walkthrough";
+        }
+
+        UI.renderMath(guidedPanel);
+    },
+
+    /**
+     * Show guided walkthroughs for ALL parts (legacy, called from old button if present).
+     */
+    showGuided: function() {
+        var q = StudyUI.currentQuestion;
+        if (!q || !q.parts) return;
+
+        q.parts.forEach(function(part, partIdx) {
+            if (part.guidedSolution) {
+                var panel = document.getElementById("sol-guided-" + partIdx);
+                if (panel && panel.style.display === "none") {
+                    StudyUI.showPartGuided(partIdx);
+                }
+            }
+        });
     },
 
     /**
@@ -6048,6 +6100,43 @@ var StudyUI = {
         }
         result += StudyUI._escapeHtml(text.substring(lastIndex));
         return result;
+    },
+
+    /**
+     * Extract examiner note and clarification from the end of a guided solution.
+     * Returns { cleanGuided, clarification }.
+     * The examiner comment itself comes from q.examinerComment (not extracted here).
+     */
+    _extractExaminerContent: function(guidedText) {
+        if (!guidedText) return { cleanGuided: "", clarification: "" };
+
+        // Pattern: ---\n\n**Note from examiner:** "..."  \n\n**This comment clarified:** ...
+        var dividerIdx = guidedText.lastIndexOf("---\\n\\n**Note from examiner");
+        if (dividerIdx === -1) dividerIdx = guidedText.lastIndexOf("---\n\n**Note from examiner");
+        if (dividerIdx === -1) {
+            // Try without the --- divider
+            dividerIdx = guidedText.lastIndexOf("**Note from examiner");
+            if (dividerIdx > 0 && guidedText.charAt(dividerIdx - 1) !== "\n") {
+                dividerIdx = -1; // Only match at start of line
+            }
+        }
+        if (dividerIdx === -1) return { cleanGuided: guidedText, clarification: "" };
+
+        var cleanGuided = guidedText.substring(0, dividerIdx).replace(/[\s\\n-]+$/, "");
+
+        var remainder = guidedText.substring(dividerIdx);
+        var clarification = "";
+        var clarIdx = remainder.indexOf("**This comment clarified:**");
+        if (clarIdx === -1) clarIdx = remainder.indexOf("**This comment clarified:");
+        if (clarIdx !== -1) {
+            clarification = remainder.substring(clarIdx);
+            // Strip the **This comment clarified:** prefix
+            clarification = clarification.replace(/^\*\*This comment clarified:\*\*\s*/, "");
+            // Clean up escaped newlines for rendering
+            clarification = clarification.replace(/\\n/g, "\n").trim();
+        }
+
+        return { cleanGuided: cleanGuided, clarification: clarification };
     }
 };
 

@@ -998,6 +998,38 @@ body.dark-theme #welcome-screen {
     border-bottom: 1px solid var(--border-color);
 }
 
+.solution-part.solution-part-expanded {
+    display: flex;
+    gap: var(--space-lg);
+    align-items: flex-start;
+}
+
+.solution-part-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.solution-part.solution-part-expanded .solution-part-main {
+    flex: 0 0 55%;
+}
+
+.solution-part-guided {
+    flex: 0 0 42%;
+    min-width: 0;
+}
+
+@media (max-width: 768px) {
+    .solution-part.solution-part-expanded {
+        flex-direction: column;
+    }
+    .solution-part.solution-part-expanded .solution-part-main {
+        flex: 1;
+    }
+    .solution-part-guided {
+        flex: 1;
+    }
+}
+
 .solution-part:last-of-type {
     border-bottom: none;
 }
@@ -1495,6 +1527,65 @@ body.dark-theme #welcome-screen {
     color: var(--text-primary);
     font-size: 0.95rem;
     line-height: 1.6;
+}
+
+/* Examiner clarification box */
+.examiner-clarification {
+    background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-secondary));
+    border-left: 4px solid var(--accent-primary);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    padding: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.examiner-clarification-label {
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: var(--space-xs);
+    font-size: 0.85rem;
+}
+
+.examiner-clarification p {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+/* Per-part guided trigger */
+.guided-part-trigger {
+    margin-top: var(--space-sm);
+}
+
+.btn-guided-part {
+    font-size: 0.85rem;
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-guided-part:hover {
+    background: var(--accent-primary);
+    color: white;
+}
+
+/* Guided panel (right side) */
+.guided-panel-content {
+    background: var(--bg-secondary);
+    border: 2px solid var(--accent-primary);
+    border-radius: var(--border-radius-lg);
+    padding: var(--space-md);
+}
+
+.guided-panel-title {
+    font-family: 'Crimson Pro', Georgia, serif;
+    color: var(--accent-primary);
+    margin-bottom: var(--space-md);
+    font-size: 1rem;
 }
 
 
