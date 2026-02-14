@@ -4929,7 +4929,7 @@ var StudyUI = {
             if (part.originalSolution && part.originalSolution.length > 0) {
                 html += '<div class="solution-lines" id="sol-lines-' + partIdx + '">';
                 part.originalSolution.forEach(function(line, lineIdx) {
-                    if (!line.shown) return;
+                    if (line.shown === false) return;
                     html += '<div class="solution-line" data-line="' + (lineIdx + 1) + '">';
                     html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
                     html += '<span class="line-text">' +
@@ -4979,7 +4979,7 @@ var StudyUI = {
                 ' went wrong:</div>';
             if (part.originalSolution) {
                 part.originalSolution.forEach(function(line, lineIdx) {
-                    if (!line.shown) return;
+                    if (line.shown === false) return;
                     html += '<div class="error-line-option" ' +
                         'onclick="StudyUI.selectErrorLine(' + partIdx + ', ' +
                         (lineIdx + 1) + ')">';
@@ -5188,7 +5188,7 @@ var StudyUI = {
         var totalLines = 0;
         if (part.originalSolution) {
             part.originalSolution.forEach(function(l) {
-                if (l.shown) totalLines++;
+                if (l.shown !== false) totalLines++;
             });
         }
         var totalCriteria = part.marking ? part.marking.length : 0;
@@ -6743,7 +6743,7 @@ var DashboardUI = {
                 if (!part || !part.originalSolution) return;
 
                 var totalLines = part.originalSolution.filter(function(l) {
-                    return l.shown;
+                    return l.shown !== false;
                 }).length;
                 if (totalLines === 0) return;
 
