@@ -1614,6 +1614,9 @@ var StudyUI = {
             html += '</div>';
             area.innerHTML = html;
 
+            // Render LaTeX in problem type names / topics
+            UI.renderMath(area);
+
             // Fire celebrations for milestones
             Celebrations.checkMilestones(sd);
 
