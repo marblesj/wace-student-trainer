@@ -748,7 +748,25 @@ var WrittenMode = {
             }
 
             var cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            var result = JSON.parse(cleaned);
+
+            // Robust JSON extraction: if the response contains prose around the JSON,
+            // find the outermost { ... } object
+            var result;
+            try {
+                result = JSON.parse(cleaned);
+            } catch (e1) {
+                var firstBrace = cleaned.indexOf("{");
+                var lastBrace = cleaned.lastIndexOf("}");
+                if (firstBrace !== -1 && lastBrace > firstBrace) {
+                    try {
+                        result = JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+                    } catch (e2) {
+                        throw new Error("Could not parse marking response as JSON");
+                    }
+                } else {
+                    throw new Error("No JSON object found in marking response");
+                }
+            }
 
             // Run SymPy verification (graceful -- returns null if unavailable)
             WrittenMode._runSympyVerification(result).then(function(sympyData) {
@@ -1364,7 +1382,10 @@ var WrittenMode = {
             "x-intercept at approximately (2,0), y-intercept at (0,-4), and a minimum turning point near (1,-5)').\n" +
             "- For notation feedback on visual questions, check axis labels and feature labels instead of equation notation.\n\n" +
 
-            "OTHER: errorLine is 1-indexed. errorType is setup/execution/interpretation/misread/null. JSON only, no markdown.";
+            "OTHER: errorLine is 1-indexed. errorType is setup/execution/interpretation/misread/null.\n\n" +
+            "RESPONSE FORMAT: Respond with ONLY the JSON object. Do NOT include any preamble, commentary, " +
+            "explanation, or markdown formatting. Your entire response must be parseable by JSON.parse(). " +
+            "Start your response with { and end with }.";
     },
 
     // ---- SYMPY VERIFICATION ----
