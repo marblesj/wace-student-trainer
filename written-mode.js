@@ -924,6 +924,10 @@ var WrittenMode = {
             var questionPart = q.parts[idx];
             if (!questionPart) return;
 
+            // Wrap in solution-part for side-by-side guided walkthrough
+            html += '<div class="solution-part">';
+            html += '<div class="solution-part-main">';
+
             html += '<div class="wm-part-result">';
 
             var scoreClass = "zero";
@@ -1057,17 +1061,25 @@ var WrittenMode = {
                 html += '</div>';
             }
 
-            // Guided walkthrough button + panel
+            // Guided walkthrough button
             if (questionPart.guidedSolution) {
-                html += '<div class="wm-guided-btn-wrap" id="guided-trigger-' + idx + '">';
-                html += '<button class="btn btn-outline wm-guided-btn" ' +
+                html += '<div class="guided-part-trigger" id="guided-trigger-' + idx + '">';
+                html += '<button class="btn btn-guided-part" ' +
                     'onclick="StudyUI.showPartGuided(' + idx + ')">' +
                     '\uD83D\uDCD6 Show walkthrough</button>';
                 html += '</div>';
-                html += '<div class="guided-panel" id="sol-guided-' + idx + '" style="display:none;"></div>';
             }
 
             html += '</div>'; // .wm-part-result
+            html += '</div>'; // .solution-part-main
+
+            // Guided solution panel (hidden, right side)
+            if (questionPart.guidedSolution) {
+                html += '<div class="solution-part-guided" id="sol-guided-' + idx +
+                    '" style="display:none;"></div>';
+            }
+
+            html += '</div>'; // .solution-part
         });
 
         container.innerHTML = html;
@@ -1229,8 +1241,7 @@ var WrittenMode = {
         }
 
         // Update part score display
-        var partScoreEl = document.querySelector(
-            "#wm-results-container .wm-part-result:nth-child(" + (partIdx + 2) + ") .wm-part-result-score");
+        var partScoreEl = rowEl.closest(".wm-part-result").querySelector(".wm-part-result-score");
         if (partScoreEl) {
             partScoreEl.textContent = partResult.totalAwarded + " / " + partResult.totalAvailable;
             if (partResult.totalAwarded === partResult.totalAvailable) {
