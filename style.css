@@ -3530,6 +3530,27 @@ body.dark-theme input[type="range"] {
     flex: 1;
 }
 
+/* Stacked canvas layout for draw-on questions (axes/tables/grids) */
+.wm-canvas-wrapper.wm-canvas-stacked {
+    /* Height is set dynamically by JS when the background image loads */
+}
+
+.wm-bg-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    display: block;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.wm-canvas-stacked .wm-drawing-canvas {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+}
+
 .wm-drawing-canvas {
     width: 100%;
     display: block;
@@ -3546,6 +3567,18 @@ body.dark-theme input[type="range"] {
     font-size: 0.95rem;
     pointer-events: none;
     font-style: italic;
+}
+
+/* Overlay placeholder for draw-on canvases */
+.wm-canvas-placeholder-overlay {
+    z-index: 2;
+    color: color-mix(in srgb, var(--accent-primary) 60%, transparent);
+    background: color-mix(in srgb, var(--paper) 70%, transparent);
+    padding: 8px 16px;
+    border-radius: var(--border-radius);
+    font-style: normal;
+    font-weight: 500;
+    font-size: 0.85rem;
 }
 
 @media (max-width: 700px) {
