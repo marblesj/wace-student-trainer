@@ -609,10 +609,6 @@
                     <p id="settings-about-text"></p>
                     <p id="settings-data-stats"></p>
                     <p id="settings-sympy-status" class="sympy-status-line"></p>
-                    <div id="settings-api-test" style="margin-top:8px;display:none;">
-                        <button id="btn-test-api" class="btn btn-secondary">Test API Connection</button>
-                        <span id="api-test-result" style="margin-left:8px;"></span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -653,6 +649,22 @@
     <script src="access-codes.js"></script>
     <script src="data_bundle.js"></script>
     <script src="schedule.js"></script>
-    <script src="app.js"></script>
+    <!-- App modules (split from app.js) -->
+    <script src="app-config.js"></script>
+    <script src="db.js"></script>
+    <script src="question-engine.js"></script>
+    <script src="mastery-engine.js"></script>
+    <script src="question-selector.js"></script>
+    <script src="session-engine.js"></script>
+    <script src="written-mode.js"></script>
+    <script src="exam-mode.js"></script>
+    <script src="study-ui.js"></script>
+    <script src="revise-ui.js"></script>
+    <script src="dashboard-ui.js"></script>
+    <script src="export-import.js"></script>
+    <script src="celebrations.js"></script>
+    <script src="keyboard-shortcuts.js"></script>
+    <script src="print-ui.js"></script>
+    <script src="app-init.js"></script>
 </body>
 </html>
