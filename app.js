@@ -1527,6 +1527,59 @@ var WrittenMode = {
         return "";
     },
 
+    getMarkEndpoint: function() {
+        if (typeof TAUGHT_SCHEDULE !== "undefined" && TAUGHT_SCHEDULE.markEndpoint) {
+            return TAUGHT_SCHEDULE.markEndpoint;
+        }
+        return "";
+    },
+
+    /**
+     * Check if Written Mode marking is available (either proxy or direct API).
+     */
+    hasMarkingAPI: function() {
+        return !!(WrittenMode.getMarkEndpoint() || WrittenMode.getApiKey());
+    },
+
+    /**
+     * Call Claude API for marking. Routes through proxy if markEndpoint is configured,
+     * falls back to direct API call if apiKey is set instead.
+     */
+    _callClaudeAPI: function(systemPrompt, contentBlocks) {
+        var markEndpoint = WrittenMode.getMarkEndpoint();
+
+        var body = {
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 2000,
+            system: systemPrompt,
+            messages: [{ role: "user", content: contentBlocks }]
+        };
+
+        if (markEndpoint) {
+            // Route through proxy (API key stored server-side)
+            return fetch(markEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            });
+        }
+
+        // Fallback: direct API call (API key in schedule.js)
+        var apiKey = WrittenMode.getApiKey();
+        if (!apiKey) return Promise.reject(new Error("No marking API configured"));
+
+        return fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-api-key": apiKey,
+                "anthropic-version": "2023-06-01",
+                "anthropic-dangerous-direct-browser-access": "true"
+            },
+            body: JSON.stringify(body)
+        });
+    },
+
     getSympyEndpoint: function() {
         if (typeof TAUGHT_SCHEDULE !== "undefined" && TAUGHT_SCHEDULE.sympyEndpoint) {
             return TAUGHT_SCHEDULE.sympyEndpoint;
@@ -1937,8 +1990,7 @@ var WrittenMode = {
 
     markAnswer: function() {
         var q = StudyUI.currentQuestion;
-        var apiKey = WrittenMode.getApiKey();
-        if (!apiKey || !q) return;
+        if (!WrittenMode.hasMarkingAPI() || !q) return;
 
         WrittenMode.QuestionTimer.stop();
 
@@ -1995,21 +2047,7 @@ var WrittenMode = {
                   "Respond with JSON only."
         });
 
-        fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": apiKey,
-                "anthropic-version": "2023-06-01",
-                "anthropic-dangerous-direct-browser-access": "true"
-            },
-            body: JSON.stringify({
-                model: "claude-sonnet-4-20250514",
-                max_tokens: 2000,
-                system: systemPrompt,
-                messages: [{ role: "user", content: contentBlocks }]
-            })
-        })
+        WrittenMode._callClaudeAPI(systemPrompt, contentBlocks)
         .then(function(resp) {
             if (!resp.ok) {
                 return resp.json().then(function(data) {
@@ -2671,7 +2709,7 @@ var WrittenMode = {
         }
 
         // If teacher hasn't provided an API key, disable Stylus toggles
-        if (!WrittenMode.getApiKey()) {
+        if (!WrittenMode.hasMarkingAPI()) {
             var stylusButtons = document.querySelectorAll('.config-toggle[data-value="stylus"]');
             stylusButtons.forEach(function(btn) {
                 btn.disabled = true;
@@ -3026,8 +3064,7 @@ var ExamMode = {
      * @returns {Promise<Object>} - AI marking result
      */
     _markSingleQuestion: function(answer) {
-        var apiKey = WrittenMode.getApiKey();
-        if (!apiKey) return Promise.reject(new Error("No API key"));
+        if (!WrittenMode.hasMarkingAPI()) return Promise.reject(new Error("No marking API configured"));
 
         var q = answer.questionData;
         var contentBlocks = [];
@@ -3082,21 +3119,7 @@ var ExamMode = {
                   "ONLY in the part where it occurred. Respond with JSON only."
         });
 
-        return fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": apiKey,
-                "anthropic-version": "2023-06-01",
-                "anthropic-dangerous-direct-browser-access": "true"
-            },
-            body: JSON.stringify({
-                model: "claude-sonnet-4-20250514",
-                max_tokens: 2000,
-                system: systemPrompt,
-                messages: [{ role: "user", content: contentBlocks }]
-            })
-        })
+        return WrittenMode._callClaudeAPI(systemPrompt, contentBlocks)
         .then(function(resp) {
             if (!resp.ok) {
                 return resp.json().then(function(data) {
@@ -4075,12 +4098,22 @@ var UI = {
         // SymPy verification status
         var sympyEl = document.getElementById("settings-sympy-status");
         if (sympyEl) {
+            var markEndpoint = WrittenMode.getMarkEndpoint();
             var sympyEndpoint = WrittenMode.getSympyEndpoint();
-            if (sympyEndpoint) {
-                sympyEl.innerHTML = '\u2705 SymPy verification: <span style="color:var(--correct-green)">enabled</span>';
+            var lines = [];
+            if (markEndpoint) {
+                lines.push('\u2705 AI Marking: <span style="color:var(--correct-green)">proxy enabled</span>');
+            } else if (WrittenMode.getApiKey()) {
+                lines.push('\u2705 AI Marking: <span style="color:var(--correct-green)">direct API</span>');
             } else {
-                sympyEl.innerHTML = '\u2014 SymPy verification: <span style="color:var(--text-muted)">not configured</span>';
+                lines.push('\u2014 AI Marking: <span style="color:var(--text-muted)">not configured</span>');
             }
+            if (sympyEndpoint) {
+                lines.push('\u2705 SymPy verification: <span style="color:var(--correct-green)">enabled</span>');
+            } else {
+                lines.push('\u2014 SymPy verification: <span style="color:var(--text-muted)">not configured</span>');
+            }
+            sympyEl.innerHTML = lines.join('<br>');
         }
 
         // Check storage usage
@@ -4276,8 +4309,8 @@ var StudyUI = {
             if (markBtn) markingMode = markBtn.getAttribute("data-value");
         }
 
-        // Check API key if stylus mode
-        if (answerMethod === "stylus" && !WrittenMode.getApiKey()) {
+        // Check marking API if stylus mode
+        if (answerMethod === "stylus" && !WrittenMode.hasMarkingAPI()) {
             alert("Written Mode is not enabled for this class. Your teacher needs to add an API key to the schedule configuration.");
             return;
         }
@@ -5857,8 +5890,8 @@ var ReviseUI = {
             }
         }
 
-        // Check API key if stylus mode
-        if (answerMethod === "stylus" && !WrittenMode.getApiKey()) {
+        // Check marking API if stylus mode
+        if (answerMethod === "stylus" && !WrittenMode.hasMarkingAPI()) {
             alert("Written Mode is not enabled for this class. Your teacher needs to add an API key to the schedule configuration.");
             if (reviseHome) reviseHome.style.display = "block";
             if (reviseArea) reviseArea.style.display = "none";
