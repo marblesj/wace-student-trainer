@@ -335,6 +335,25 @@ body.dark-theme #welcome-screen {
     margin-top: var(--space-xs);
 }
 
+.access-code-error {
+    color: #dc2626;
+    font-size: 0.85rem;
+    min-height: 1.2em;
+    margin-bottom: var(--space-sm);
+}
+
+.access-skip-hint {
+    margin-top: var(--space-md);
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.access-skip-hint a {
+    color: var(--primary);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 
 /* ---- TOP BAR ---- */
 #top-bar {

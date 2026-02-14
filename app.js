@@ -283,25 +283,42 @@ var QuestionEngine = {
         var unlocked = {};
 
         // Base schedule from schedule.js
-        if (typeof TAUGHT_SCHEDULE !== "undefined" && TAUGHT_SCHEDULE.schedule) {
-            TAUGHT_SCHEDULE.schedule.forEach(function(entry) {
-                var entryDate = new Date(entry.date + "T00:00:00");
-                if (aheadOfSchedule || entryDate <= today) {
-                    (entry.problemTypes || []).forEach(function(pt) {
-                        unlocked[pt] = true;
-                    });
-                }
-            });
+        if (typeof TAUGHT_SCHEDULE !== "undefined") {
+            // New format: flat enabledProblemTypes array (teacher ticks what they've taught)
+            if (TAUGHT_SCHEDULE.enabledProblemTypes) {
+                TAUGHT_SCHEDULE.enabledProblemTypes.forEach(function(pt) {
+                    unlocked[pt] = true;
+                });
+            }
+            // Legacy format: dated weeks (kept for backward compatibility)
+            if (TAUGHT_SCHEDULE.schedule) {
+                TAUGHT_SCHEDULE.schedule.forEach(function(entry) {
+                    var entryDate = new Date(entry.date + "T00:00:00");
+                    if (aheadOfSchedule || entryDate <= today) {
+                        (entry.problemTypes || []).forEach(function(pt) {
+                            unlocked[pt] = true;
+                        });
+                    }
+                });
+            }
         }
 
         // Imported schedule updates from IndexedDB
         if (scheduleUpdates && scheduleUpdates.length > 0) {
             scheduleUpdates.forEach(function(entry) {
-                var entryDate = new Date(entry.date + "T00:00:00");
-                if (aheadOfSchedule || entryDate <= today) {
-                    (entry.problemTypes || []).forEach(function(pt) {
+                if (entry.enabledProblemTypes) {
+                    // New format update
+                    entry.enabledProblemTypes.forEach(function(pt) {
                         unlocked[pt] = true;
                     });
+                } else {
+                    // Legacy format update
+                    var entryDate = new Date(entry.date + "T00:00:00");
+                    if (aheadOfSchedule || entryDate <= today) {
+                        (entry.problemTypes || []).forEach(function(pt) {
+                            unlocked[pt] = true;
+                        });
+                    }
                 }
             });
         }
@@ -416,6 +433,7 @@ var QuestionEngine = {
         today.setHours(0, 0, 0, 0);
         var nextUnlock = null;
 
+        // Legacy dated-weeks format
         if (TAUGHT_SCHEDULE.schedule) {
             for (var i = 0; i < TAUGHT_SCHEDULE.schedule.length; i++) {
                 var d = new Date(TAUGHT_SCHEDULE.schedule[i].date + "T00:00:00");
@@ -426,10 +444,15 @@ var QuestionEngine = {
             }
         }
 
+        // Count total enabled types (new format) or schedule entries (legacy)
+        var totalEntries = TAUGHT_SCHEDULE.enabledProblemTypes
+            ? TAUGHT_SCHEDULE.enabledProblemTypes.length
+            : (TAUGHT_SCHEDULE.schedule || []).length;
+
         return {
             className: TAUGHT_SCHEDULE.className || "Unknown Class",
             teacherName: TAUGHT_SCHEDULE.teacherName || "Unknown",
-            totalEntries: (TAUGHT_SCHEDULE.schedule || []).length,
+            totalEntries: totalEntries,
             allowAheadOfSchedule: !!TAUGHT_SCHEDULE.allowAheadOfSchedule,
             nextUnlock: nextUnlock
         };
@@ -2069,7 +2092,7 @@ var WrittenMode = {
             var cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
             var result = JSON.parse(cleaned);
 
-            // Run SymPy verification (graceful — returns null if unavailable)
+            // Run SymPy verification (graceful â€” returns null if unavailable)
             WrittenMode._runSympyVerification(result).then(function(sympyData) {
                 WrittenMode.displayResults(result, sympyData);
             });
@@ -3884,6 +3907,8 @@ var UI = {
      * Show the welcome screen for first-run setup.
      */
     showWelcomeScreen: function() {
+        var codeScreen = document.getElementById("access-code-screen");
+        if (codeScreen) codeScreen.style.display = "none";
         document.getElementById("welcome-screen").style.display = "flex";
         document.getElementById("app-container").style.display = "none";
 
@@ -3891,6 +3916,12 @@ var UI = {
         var info = QuestionEngine.getScheduleInfo();
         var classInfo = document.getElementById("welcome-class-info");
         var schedInfo = document.getElementById("welcome-schedule-info");
+
+        // Update subtitle from schedule className
+        var subtitle = document.getElementById("welcome-subtitle");
+        if (subtitle && info.className && info.className !== "Unknown Class") {
+            subtitle.textContent = info.className;
+        }
 
         if (classInfo) {
             classInfo.textContent = "Class: " + info.className;
@@ -3938,6 +3969,13 @@ var UI = {
 
         DB.put(STORE_CONFIG, config).then(function() {
             console.log("Config saved for: " + name);
+
+            // Complete access code claim if applicable
+            if (typeof AccessControl !== "undefined" &&
+                typeof AccessControl.completeClaim === "function") {
+                AccessControl.completeClaim(name);
+            }
+
             UI.showMainApp(config);
         }).catch(function(err) {
             console.error("Failed to save config:", err);
@@ -3951,6 +3989,8 @@ var UI = {
      */
     showMainApp: function(config) {
         document.getElementById("welcome-screen").style.display = "none";
+        var codeScreen = document.getElementById("access-code-screen");
+        if (codeScreen) codeScreen.style.display = "none";
         document.getElementById("app-container").style.display = "block";
 
         // Set student name in header
@@ -8374,4 +8414,35 @@ function initApp() {
 }
 
 // Start when DOM is ready
-window.addEventListener("DOMContentLoaded", initApp);
+window.addEventListener("DOMContentLoaded", function() {
+    // Set up skip link handler (allows students to use app without access code)
+    var skipLink = document.getElementById("access-skip-link");
+    if (skipLink) {
+        skipLink.addEventListener("click", function(e) {
+            e.preventDefault();
+            var codeScreen = document.getElementById("access-code-screen");
+            if (codeScreen) codeScreen.style.display = "none";
+            initApp();
+        });
+    }
+
+    // Check access control first (shows code screen if needed)
+    if (typeof AccessControl !== "undefined") {
+        AccessControl.init().then(function(result) {
+            if (result.granted) {
+                initApp();
+            } else {
+                // Show skip option after a delay (for students without codes)
+                var skipHint = document.getElementById("access-skip-hint");
+                if (skipHint) {
+                    setTimeout(function() {
+                        skipHint.style.display = "block";
+                    }, 3000);
+                }
+            }
+        });
+    } else {
+        // AccessControl not loaded (scripts missing), proceed directly
+        initApp();
+    }
+});

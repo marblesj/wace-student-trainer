@@ -51,11 +51,39 @@
     <!-- ============================================================ -->
     <!-- WELCOME SCREEN (first-run only)                              -->
     <!-- ============================================================ -->
+    <!-- ============================================================ -->
+    <!-- ACCESS CODE SCREEN (shown before welcome if Firebase enabled) -->
+    <!-- ============================================================ -->
+    <div id="access-code-screen" class="screen" style="display:none;">
+        <div class="welcome-container">
+            <div class="welcome-icon" id="access-icon-area"></div>
+            <h1>WACE Methods Study Trainer</h1>
+            <p class="welcome-subtitle">Enter your access code to get started</p>
+            <div class="welcome-form">
+                <label for="access-code-input">Access Code</label>
+                <input type="text" id="access-code-input" placeholder="e.g. MATH-1234"
+                       maxlength="20" autocomplete="off" style="text-transform:uppercase;">
+                <p class="welcome-hint">Your teacher will give you a unique code.</p>
+                <p id="access-code-error" class="access-code-error"></p>
+                <button id="access-code-btn" class="btn btn-primary btn-large" disabled>
+                    Continue
+                </button>
+                <p class="access-skip-hint" id="access-skip-hint" style="display:none;">
+                    <a href="#" id="access-skip-link">Continue without a code</a>
+                    <br><span class="welcome-hint">Your progress won't sync to the teacher dashboard.</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- WELCOME SCREEN                                                -->
+    <!-- ============================================================ -->
     <div id="welcome-screen" class="screen" style="display:none;">
         <div class="welcome-container">
             <div class="welcome-icon" id="welcome-icon-area"></div>
             <h1>WACE Methods Study Trainer</h1>
-            <p class="welcome-subtitle">Year 12 Mathematics Methods</p>
+            <p class="welcome-subtitle" id="welcome-subtitle">Year 12 Mathematics Methods</p>
             <div class="welcome-form">
                 <label for="student-name-input">What's your name?</label>
                 <input type="text" id="student-name-input" placeholder="Enter your name..."
@@ -612,6 +640,13 @@
     <!-- ============================================================ -->
     <!-- SCRIPTS - loaded from repo root (cloud version)              -->
     <!-- ============================================================ -->
+    <!-- Firebase SDK (compat for simple script-tag usage) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="firebase-sync.js"></script>
+    <script src="access-codes.js"></script>
     <script src="data_bundle.js"></script>
     <script src="schedule.js"></script>
     <script src="app.js"></script>
