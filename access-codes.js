@@ -21,6 +21,118 @@ var AccessControl = {
     NAME_KEY: "wace_student_name",
     TIMEOUT_MS: 4000,         // How long to wait for Firebase before falling back
     firebaseAvailable: false, // Set to true once Firebase responds successfully
+    IDB_NAME: "wace_credentials",
+    IDB_VERSION: 1,
+    IDB_STORE: "creds",
+
+    // ---- IndexedDB credential persistence ----
+
+    /**
+     * Open the small dedicated credentials IndexedDB.
+     * @private
+     */
+    _openCredDB: function() {
+        return new Promise(function(resolve, reject) {
+            var request = indexedDB.open(AccessControl.IDB_NAME, AccessControl.IDB_VERSION);
+            request.onupgradeneeded = function(e) {
+                var db = e.target.result;
+                if (!db.objectStoreNames.contains(AccessControl.IDB_STORE)) {
+                    db.createObjectStore(AccessControl.IDB_STORE, { keyPath: "key" });
+                }
+            };
+            request.onsuccess = function(e) { resolve(e.target.result); };
+            request.onerror = function(e) {
+                console.warn("AccessControl: Credential IDB open failed", e.target.error);
+                resolve(null);
+            };
+        });
+    },
+
+    /**
+     * Save a credential to IndexedDB.
+     * @private
+     */
+    _idbSet: function(key, value) {
+        return AccessControl._openCredDB().then(function(db) {
+            if (!db) return;
+            return new Promise(function(resolve) {
+                var tx = db.transaction(AccessControl.IDB_STORE, "readwrite");
+                tx.objectStore(AccessControl.IDB_STORE).put({ key: key, value: value });
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function() { resolve(); };
+            });
+        }).catch(function() { /* silent */ });
+    },
+
+    /**
+     * Get a credential from IndexedDB.
+     * @private
+     */
+    _idbGet: function(key) {
+        return AccessControl._openCredDB().then(function(db) {
+            if (!db) return null;
+            return new Promise(function(resolve) {
+                var tx = db.transaction(AccessControl.IDB_STORE, "readonly");
+                var req = tx.objectStore(AccessControl.IDB_STORE).get(key);
+                req.onsuccess = function() {
+                    resolve(req.result ? req.result.value : null);
+                };
+                req.onerror = function() { resolve(null); };
+            });
+        }).catch(function() { return null; });
+    },
+
+    /**
+     * Save credentials to BOTH localStorage and IndexedDB.
+     */
+    _saveCredential: function(key, value) {
+        localStorage.setItem(key, value);
+        return AccessControl._idbSet(key, value);
+    },
+
+    /**
+     * Remove a credential from BOTH stores.
+     */
+    _removeCredential: function(key) {
+        localStorage.removeItem(key);
+        return AccessControl._openCredDB().then(function(db) {
+            if (!db) return;
+            return new Promise(function(resolve) {
+                var tx = db.transaction(AccessControl.IDB_STORE, "readwrite");
+                tx.objectStore(AccessControl.IDB_STORE).delete(key);
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function() { resolve(); };
+            });
+        }).catch(function() { /* silent */ });
+    },
+
+    /**
+     * Restore localStorage from IndexedDB if localStorage was cleared.
+     * Returns a promise that resolves when sync is done.
+     * @private
+     */
+    _restoreFromIDB: function() {
+        var keys = [AccessControl.TOKEN_KEY, AccessControl.CODE_KEY, AccessControl.NAME_KEY];
+        var anyRestored = false;
+
+        return keys.reduce(function(chain, key) {
+            return chain.then(function() {
+                var lsVal = localStorage.getItem(key);
+                if (lsVal) return; // already have it
+                return AccessControl._idbGet(key).then(function(idbVal) {
+                    if (idbVal) {
+                        localStorage.setItem(key, idbVal);
+                        anyRestored = true;
+                        console.log("AccessControl: Restored " + key + " from IndexedDB");
+                    }
+                });
+            });
+        }, Promise.resolve()).then(function() {
+            if (anyRestored) {
+                console.log("AccessControl: Credentials restored from IndexedDB backup");
+            }
+        });
+    },
 
     /**
      * Race a promise against a timeout. Returns whichever resolves first.
@@ -72,44 +184,49 @@ var AccessControl = {
             firebase.initializeApp(FIREBASE_CONFIG);
         }
 
-        // Check if this browser already has a claimed code
-        var existingCode = localStorage.getItem(AccessControl.CODE_KEY);
-        var existingToken = localStorage.getItem(AccessControl.TOKEN_KEY);
-        var existingName = localStorage.getItem(AccessControl.NAME_KEY);
+        // First, restore any credentials from IndexedDB if localStorage was cleared
+        return AccessControl._restoreFromIDB().then(function() {
+            // Check if this browser already has a claimed code
+            var existingCode = localStorage.getItem(AccessControl.CODE_KEY);
+            var existingToken = localStorage.getItem(AccessControl.TOKEN_KEY);
+            var existingName = localStorage.getItem(AccessControl.NAME_KEY);
 
-        if (existingCode && existingToken) {
-            // Try to verify with Firebase, but fall back after timeout
-            var verifyPromise = AccessControl._verifyCodeExists(existingCode);
-            return AccessControl._withTimeout(
-                verifyPromise,
-                AccessControl.TIMEOUT_MS,
-                { valid: true, alreadyMine: true, offline: true }
-            ).then(function(result) {
-                if (result.valid && result.alreadyMine) {
-                    if (result.offline) {
-                        console.log("AccessControl: Firebase unreachable, granting access from local storage");
-                    } else {
-                        console.log("AccessControl: Code verified online, access granted");
+            if (existingCode && existingToken) {
+                // Try to verify with Firebase, but fall back after timeout
+                var verifyPromise = AccessControl._verifyCodeExists(existingCode);
+                return AccessControl._withTimeout(
+                    verifyPromise,
+                    AccessControl.TIMEOUT_MS,
+                    { valid: true, alreadyMine: true, offline: true }
+                ).then(function(result) {
+                    if (result.valid && result.alreadyMine) {
+                        if (result.offline) {
+                            console.log("AccessControl: Firebase unreachable, granting access from local storage");
+                        } else {
+                            console.log("AccessControl: Code verified online, access granted");
+                        }
+                        return { granted: true };
                     }
-                    return { granted: true };
-                }
-                // Code was revoked or reassigned -- show code screen
-                localStorage.removeItem(AccessControl.CODE_KEY);
-                localStorage.removeItem(AccessControl.TOKEN_KEY);
-                AccessControl._showCodeScreen();
-                return { granted: false };
-            });
-        }
+                    // Code was revoked or reassigned -- show code screen
+                    return AccessControl._removeCredential(AccessControl.CODE_KEY).then(function() {
+                        return AccessControl._removeCredential(AccessControl.TOKEN_KEY);
+                    }).then(function() {
+                        AccessControl._showCodeScreen();
+                        return { granted: false };
+                    });
+                });
+            }
 
-        // If we have a stored name but no code (local-only session), let them in
-        if (existingName) {
-            console.log("AccessControl: Returning local-only user: " + existingName);
-            return Promise.resolve({ granted: true });
-        }
+            // If we have a stored name but no code (local-only session), let them in
+            if (existingName) {
+                console.log("AccessControl: Returning local-only user: " + existingName);
+                return { granted: true };
+            }
 
-        // No code stored -- show the access code entry screen
-        AccessControl._showCodeScreen();
-        return Promise.resolve({ granted: false });
+            // No code stored -- show the access code entry screen
+            AccessControl._showCodeScreen();
+            return { granted: false };
+        });
     },
 
     /**
@@ -170,25 +287,28 @@ var AccessControl = {
 
                 if (result.alreadyMine) {
                     // Re-use existing claim
-                    localStorage.setItem(AccessControl.CODE_KEY, code);
-                    screen.style.display = "none";
-                    initApp();
+                    AccessControl._saveCredential(AccessControl.CODE_KEY, code).then(function() {
+                        screen.style.display = "none";
+                        initApp();
+                    });
                     return;
                 }
 
                 // New code entry (online or offline fallback)
                 var token = AccessControl._generateToken();
-                localStorage.setItem(AccessControl.TOKEN_KEY, token);
-                localStorage.setItem(AccessControl.CODE_KEY, code);
+                Promise.all([
+                    AccessControl._saveCredential(AccessControl.TOKEN_KEY, token),
+                    AccessControl._saveCredential(AccessControl.CODE_KEY, code)
+                ]).then(function() {
+                    if (result.offline) {
+                        // Firebase unreachable -- store code locally, will claim later
+                        console.log("AccessControl: Stored code locally (will claim when Firebase available)");
+                        localStorage.setItem("wace_pending_claim", "true");
+                    }
 
-                if (result.offline) {
-                    // Firebase unreachable -- store code locally, will claim later
-                    console.log("AccessControl: Stored code locally (will claim when Firebase available)");
-                    localStorage.setItem("wace_pending_claim", "true");
-                }
-
-                screen.style.display = "none";
-                initApp();
+                    screen.style.display = "none";
+                    initApp();
+                });
             });
         });
 
@@ -230,7 +350,7 @@ var AccessControl = {
      * Also handles pending claims from offline sessions.
      */
     completeClaim: function(studentName) {
-        localStorage.setItem(AccessControl.NAME_KEY, studentName);
+        AccessControl._saveCredential(AccessControl.NAME_KEY, studentName);
 
         var code = localStorage.getItem(AccessControl.CODE_KEY);
         if (!code) {
