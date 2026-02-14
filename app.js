@@ -335,6 +335,8 @@ var QuestionEngine = {
      */
     isQuestionAvailable: function(questionData) {
         if (!questionData || !questionData.parts) return false;
+        // Filter out questions with empty parts array (e.g. WACE_2017_CF_Q04)
+        if (questionData.parts.length === 0) return false;
         var unlockedSet = {};
         QuestionEngine.unlockedProblemTypes.forEach(function(pt) {
             unlockedSet[pt] = true;
@@ -1908,7 +1910,9 @@ var WrittenMode = {
 
     // ---- RENDER CANVAS ROW HTML ----
 
-    renderCanvasRow: function(partLabel) {
+    renderCanvasRow: function(partLabel, partMarks) {
+        // Scale canvas height based on marks: min 300px, +100px per mark above 2
+        var canvasHeight = Math.max(300, 200 + (partMarks || 2) * 100);
         var html = '<div class="wm-canvas-row">';
 
         // Main answer canvas
@@ -1959,7 +1963,7 @@ var WrittenMode = {
         // Canvas
         html += '<div class="wm-canvas-wrapper">';
         html += '<canvas class="wm-drawing-canvas" id="wm-canvas-' + partLabel +
-            '" height="300" style="height:300px;"></canvas>';
+            '" height="' + canvasHeight + '" style="height:' + canvasHeight + 'px;"></canvas>';
         html += '<div class="wm-canvas-placeholder">Write your answer here</div>';
         html += '</div>';
 
@@ -1986,7 +1990,7 @@ var WrittenMode = {
         html += '</div>';
         html += '<div class="wm-canvas-wrapper">';
         html += '<canvas class="wm-drawing-canvas" id="wm-canvas-' + scribbleId +
-            '" height="300" style="height:300px;"></canvas>';
+            '" height="' + canvasHeight + '" style="height:' + canvasHeight + 'px;"></canvas>';
         html += '<div class="wm-canvas-placeholder">Scratch pad</div>';
         html += '</div>';
         html += '</div>'; // canvas-area
@@ -2092,7 +2096,7 @@ var WrittenMode = {
             var cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
             var result = JSON.parse(cleaned);
 
-            // Run SymPy verification (graceful Ã¢â‚¬â€ returns null if unavailable)
+            // Run SymPy verification (graceful -- returns null if unavailable)
             WrittenMode._runSympyVerification(result).then(function(sympyData) {
                 WrittenMode.displayResults(result, sympyData);
             });
@@ -2762,6 +2766,7 @@ var ExamMode = {
 
     // Question tracking
     testAnswers: [],       // Array of { questionIndex, questionData, filename, partImages, timeSpent }
+    examQuestions: [],     // Array of { questionData, filename } for all visited questions (supports prev/next)
     questionStartTime: null,
     currentExamIndex: 0,   // 0-based index of current question in this exam
     totalExamQuestions: 0,  // filled as we go (we don't know total upfront)
@@ -2801,6 +2806,7 @@ var ExamMode = {
         ExamMode.totalSeconds = ExamMode.calcTime(targetMarks);
         ExamMode.remainingSeconds = ExamMode.totalSeconds;
         ExamMode.testAnswers = [];
+        ExamMode.examQuestions = [];
         ExamMode.currentExamIndex = 0;
         ExamMode.totalExamQuestions = 0;
         ExamMode.accumulatedMarks = 0;
@@ -2889,14 +2895,23 @@ var ExamMode = {
             });
         }
 
-        ExamMode.testAnswers.push({
+        var entry = {
             questionIndex: ExamMode.currentExamIndex,
             questionData: q,
             filename: fn,
             partImages: partImages,
             timeSpent: Math.round(timeSpent),
             totalMarks: q.totalMarks || 0
-        });
+        };
+
+        // Update in-place if revisiting, otherwise push new entry
+        if (ExamMode.testAnswers[ExamMode.currentExamIndex]) {
+            // Accumulate time spent across visits
+            entry.timeSpent += ExamMode.testAnswers[ExamMode.currentExamIndex].timeSpent;
+            ExamMode.testAnswers[ExamMode.currentExamIndex] = entry;
+        } else {
+            ExamMode.testAnswers[ExamMode.currentExamIndex] = entry;
+        }
     },
 
     /**
@@ -2909,20 +2924,26 @@ var ExamMode = {
         ExamMode.currentExamIndex++;
         ExamMode.questionStartTime = Date.now();
 
-        // Check if we've accumulated enough marks
+        // Update accumulated marks from all answers so far
         var totalMarksSoFar = 0;
         ExamMode.testAnswers.forEach(function(ta) {
-            totalMarksSoFar += ta.totalMarks;
+            if (ta) totalMarksSoFar += ta.totalMarks;
         });
         ExamMode.accumulatedMarks = totalMarksSoFar;
 
+        // If we've already visited this question, restore it
+        if (ExamMode.examQuestions[ExamMode.currentExamIndex]) {
+            ExamMode._restoreExamQuestion(ExamMode.currentExamIndex);
+            return;
+        }
+
+        // Check if we've accumulated enough marks before fetching more
         if (totalMarksSoFar >= ExamMode.targetMarks) {
-            // We have enough marks, show "exam complete" option
             ExamMode._loadNextOrFinish();
             return;
         }
 
-        // Load next question through normal SessionEngine
+        // Load a brand new question through SessionEngine
         SessionEngine.getNext().then(function(result) {
             if (!result) {
                 // No more questions available
@@ -2933,6 +2954,71 @@ var ExamMode = {
             StudyUI.renderQuestion(result);
             window.scrollTo(0, 0);
         });
+    },
+
+    /**
+     * Navigate to the previous question in exam mode.
+     * Snapshots current canvas, decrements index, restores previous question.
+     */
+    previousQuestion: function() {
+        if (ExamMode.currentExamIndex <= 0) return;
+
+        // Snapshot current question before leaving
+        ExamMode.snapshotCurrentQuestion();
+        ExamMode.currentExamIndex--;
+        ExamMode.questionStartTime = Date.now();
+
+        // Restore the previous question
+        ExamMode._restoreExamQuestion(ExamMode.currentExamIndex);
+    },
+
+    /**
+     * Restore a previously visited exam question (re-render + restore canvas from PNG).
+     * @param {number} idx - index in examQuestions array
+     */
+    _restoreExamQuestion: function(idx) {
+        var eq = ExamMode.examQuestions[idx];
+        if (!eq) return;
+
+        // Re-render the question
+        StudyUI.renderQuestion({
+            questionData: eq.questionData,
+            filename: eq.filename,
+            questionNumber: idx + 1
+        });
+        window.scrollTo(0, 0);
+
+        // Restore canvas images from saved snapshots (stylus mode)
+        var saved = ExamMode.testAnswers[idx];
+        if (saved && saved.partImages && SessionEngine.answerMethod === "stylus") {
+            // Wait for canvases to be initialized by renderQuestion
+            setTimeout(function() {
+                WrittenMode.initCanvasesForQuestion(eq.questionData);
+                Object.keys(saved.partImages).forEach(function(partLabel) {
+                    var dataUrl = saved.partImages[partLabel];
+                    var state = WrittenMode.CanvasEngine.canvases[partLabel];
+                    if (state && dataUrl) {
+                        var img = new Image();
+                        img.onload = function() {
+                            state.ctx.globalCompositeOperation = "source-over";
+                            state.ctx.clearRect(0, 0,
+                                state.canvas.width / state.dpr,
+                                state.canvas.height / state.dpr);
+                            state.ctx.drawImage(img, 0, 0,
+                                state.canvas.width / state.dpr,
+                                state.canvas.height / state.dpr);
+                            state.hasContent = true;
+                            // Hide placeholder
+                            var ph = state.canvas.parentElement
+                                .querySelector(".wm-canvas-placeholder");
+                            if (ph) ph.style.display = "none";
+                        };
+                        img.src = dataUrl;
+                    }
+                });
+                WrittenMode.checkMarkButton();
+            }, 100);
+        }
     },
 
     /**
@@ -2984,7 +3070,9 @@ var ExamMode = {
         if (!markingScreen) return;
         markingScreen.style.display = "block";
 
-        var total = ExamMode.testAnswers.length;
+        // Filter out any undefined entries (safety for sparse array)
+        var answers = ExamMode.testAnswers.filter(function(a) { return !!a; });
+        var total = answers.length;
         var html = '<div class="exam-marking-progress">';
         html += '<h2>\u2699\uFE0F Marking Your Test</h2>';
         html += '<div class="exam-marking-status" id="exam-marking-status">';
@@ -3006,7 +3094,7 @@ var ExamMode = {
                 return;
             }
 
-            var answer = ExamMode.testAnswers[current];
+            var answer = answers[current];
             var statusEl = document.getElementById("exam-marking-status");
             var barEl = document.getElementById("exam-marking-bar");
             var logEl = document.getElementById("exam-marking-log");
@@ -3174,7 +3262,9 @@ var ExamMode = {
         if (!resultsScreen) return;
         resultsScreen.style.display = "block";
 
-        var total = ExamMode.testAnswers.length;
+        // Filter out any undefined entries (safety for sparse array)
+        var answers = ExamMode.testAnswers.filter(function(a) { return !!a; });
+        var total = answers.length;
         var timeUsed = ExamMode.totalSeconds - ExamMode.remainingSeconds;
 
         var html = '<div class="exam-results">';
@@ -3188,7 +3278,7 @@ var ExamMode = {
             'Check the solution and mark each criterion honestly.</p>';
 
         // For each question, show the question + solution with self-assessment
-        ExamMode.testAnswers.forEach(function(answer, qIdx) {
+        answers.forEach(function(answer, qIdx) {
             var q = answer.questionData;
             html += '<div class="exam-result-question" data-exam-q="' + qIdx + '">';
             html += '<div class="exam-result-q-header">';
@@ -3200,7 +3290,7 @@ var ExamMode = {
             // Show question text briefly
             if (q.questionStimulus) {
                 html += '<div class="question-stimulus">' +
-                    StudyUI._renderSolutionText(q.questionStimulus, q._pool) + '</div>';
+                    StudyUI._escapeHtml(q.questionStimulus) + '</div>';
             }
 
             // For each part: show solution + self-assessment checkboxes
@@ -3213,7 +3303,7 @@ var ExamMode = {
                     html += '<span class="part-marks">[' + part.partMarks + ' mark' +
                         (part.partMarks !== 1 ? "s" : "") + ']</span></div>';
                     html += '<div class="part-text">' +
-                        StudyUI._renderSolutionText(part.questionText, q._pool) + '</div>';
+                        StudyUI._escapeHtml(part.questionText) + '</div>';
 
                     // Solution
                     if (part.originalSolution && part.originalSolution.length > 0) {
@@ -3648,6 +3738,7 @@ var ExamMode = {
         ExamMode.active = false;
         ExamMode.state = "inactive";
         ExamMode.testAnswers = [];
+        ExamMode.examQuestions = [];
 
         if (ExamMode.timerInterval) {
             clearInterval(ExamMode.timerInterval);
@@ -3672,7 +3763,8 @@ var ExamMode = {
      * @returns {string} HTML string
      */
     renderBottomBar: function() {
-        var total = ExamMode.testAnswers.length + 1; // +1 for current question
+        var qNum = ExamMode.currentExamIndex + 1;
+        var totalVisited = ExamMode.examQuestions.length || qNum;
         var html = '<div class="exam-bottom-bar" id="exam-bottom-bar">';
         html += '<div class="exam-bar-inner">';
         html += '<div class="exam-timer">';
@@ -3680,8 +3772,12 @@ var ExamMode = {
         html += '<span class="exam-timer-display" id="exam-timer-display">' +
             ExamMode.formatTime(ExamMode.remainingSeconds) + '</span>';
         html += '</div>';
-        html += '<div class="exam-q-counter" id="exam-q-counter">Q ' + total + '</div>';
+        html += '<div class="exam-q-counter" id="exam-q-counter">Q ' + qNum +
+            ' of ' + totalVisited + '</div>';
         html += '<div class="exam-bar-buttons">';
+        html += '<button class="btn exam-prev-btn" id="exam-prev-btn"' +
+            (ExamMode.currentExamIndex <= 0 ? ' disabled' : '') +
+            '>\u2190 Previous</button>';
         html += '<button class="btn btn-primary exam-next-btn" id="exam-next-btn">' +
             'Next Question \u2192</button>';
         html += '<button class="btn btn-danger exam-end-btn" id="exam-end-btn">' +
@@ -4545,6 +4641,17 @@ var StudyUI = {
         StudyUI.totalParts = questionInfo.questionData.parts ?
             questionInfo.questionData.parts.length : 0;
 
+        // Track this question in exam mode (for previous/next navigation)
+        if (ExamMode.active && ExamMode.state === "running") {
+            var idx = ExamMode.currentExamIndex;
+            if (!ExamMode.examQuestions[idx]) {
+                ExamMode.examQuestions[idx] = {
+                    questionData: questionInfo.questionData,
+                    filename: questionInfo.filename
+                };
+            }
+        }
+
         var area = document.getElementById(StudyUI._activeAreaId);
         if (!area) return;
 
@@ -4555,7 +4662,7 @@ var StudyUI = {
         html += '<div class="session-progress">';
         if (ExamMode.active) {
             // Exam mode: show marks accumulated and question number
-            var qNum = ExamMode.testAnswers.length + 1;
+            var qNum = ExamMode.currentExamIndex + 1;
             html += '<div class="progress-text">Question ' + qNum +
                 ' \u2014 ' + ExamMode.accumulatedMarks + ' / ' +
                 ExamMode.targetMarks + ' marks queued</div>';
@@ -4598,25 +4705,16 @@ var StudyUI = {
         }
         html += '</div></div>';
 
-        // Question stimulus (render [IMAGE:] as inline diagrams)
+        // Question stimulus
         if (q.questionStimulus) {
             html += '<div class="question-stimulus">' +
-                StudyUI._renderSolutionText(q.questionStimulus, q._pool) + '</div>';
+                StudyUI._escapeHtml(q.questionStimulus) + '</div>';
         }
 
-        // Collect [IMAGE:] filenames already rendered inline in stimulus + all part texts
-        var inlineImages = {};
-        StudyUI._collectImageRefs(q.questionStimulus || "", inlineImages);
-        if (q.parts) {
-            q.parts.forEach(function(p) {
-                StudyUI._collectImageRefs(p.questionText || "", inlineImages);
-            });
-        }
-
-        // Diagrams (question-level: stem diagrams NOT already shown inline)
+        // Diagrams (question-level: stem diagrams only from diagramPlaceholders)
         var qDiagrams = (q.diagramPlaceholders && q.diagramPlaceholders.question) || [];
         var stemDiagrams = qDiagrams.filter(function(d) {
-            if (inlineImages[d]) return false;
+            // Stem diagrams contain "PartStem" or "_Stem", or have no "Part" reference at all
             return d.indexOf("PartStem") !== -1 || d.indexOf("_Stem") !== -1 ||
                    d.indexOf("Part") === -1;
         });
@@ -4641,12 +4739,13 @@ var StudyUI = {
                     (part.partMarks !== 1 ? 's' : '') + ']</span>';
                 html += '</div>';
                 html += '<div class="part-text">' +
-                    StudyUI._renderSolutionText(part.questionText, q._pool) + '</div>';
+                    StudyUI._escapeHtml(part.questionText) + '</div>';
 
-                // Part-level diagrams (from diagramPlaceholders + diagramsNeeded, excluding inline)
+                // Part-level diagrams (from diagramPlaceholders + diagramsNeeded)
                 var partLabel = part.partLabel;
                 var partDiags = qDiagrams.filter(function(d) {
-                    if (inlineImages[d]) return false;
+                    // Match diagrams referencing this part, e.g. "Parta)_IMG" or "Parta)Stem"
+                    // but exclude stem-only diagrams already shown above
                     if (d.indexOf("PartStem") !== -1) return false;
                     if (d.indexOf("_Stem") !== -1 && d.indexOf("Part" + partLabel) === -1) return false;
                     return d.indexOf("Part" + partLabel + ")") !== -1 ||
@@ -4669,7 +4768,7 @@ var StudyUI = {
 
                 // STYLUS MODE: add canvas row inside each part (for both instant and exam)
                 if (SessionEngine.answerMethod === "stylus") {
-                    html += WrittenMode.renderCanvasRow(part.partLabel);
+                    html += WrittenMode.renderCanvasRow(part.partLabel, part.partMarks);
                 }
 
                 html += '</div>';
@@ -4746,6 +4845,14 @@ var StudyUI = {
                 });
             }
 
+            // Bind exam Previous Question button
+            var examPrevBtn = document.getElementById("exam-prev-btn");
+            if (examPrevBtn) {
+                examPrevBtn.addEventListener("click", function() {
+                    ExamMode.previousQuestion();
+                });
+            }
+
             // Bind exam End Test button
             var examEndBtn = document.getElementById("exam-end-btn");
             if (examEndBtn) {
@@ -4760,7 +4867,9 @@ var StudyUI = {
             // Update the question counter display
             var counterEl = document.getElementById("exam-q-counter");
             if (counterEl) {
-                counterEl.textContent = "Q " + (ExamMode.testAnswers.length + 1);
+                var qNum = ExamMode.currentExamIndex + 1;
+                var totalVisited = ExamMode.examQuestions.length || qNum;
+                counterEl.textContent = "Q " + qNum + " of " + totalVisited;
             }
 
         } else if (SessionEngine.answerMethod === "stylus") {
@@ -4929,7 +5038,7 @@ var StudyUI = {
             if (part.originalSolution && part.originalSolution.length > 0) {
                 html += '<div class="solution-lines" id="sol-lines-' + partIdx + '">';
                 part.originalSolution.forEach(function(line, lineIdx) {
-                    if (line.shown === false) return;
+                    if (!line.shown) return;
                     html += '<div class="solution-line" data-line="' + (lineIdx + 1) + '">';
                     html += '<span class="line-number">' + (lineIdx + 1) + '</span>';
                     html += '<span class="line-text">' +
@@ -4979,7 +5088,7 @@ var StudyUI = {
                 ' went wrong:</div>';
             if (part.originalSolution) {
                 part.originalSolution.forEach(function(line, lineIdx) {
-                    if (line.shown === false) return;
+                    if (!line.shown) return;
                     html += '<div class="error-line-option" ' +
                         'onclick="StudyUI.selectErrorLine(' + partIdx + ', ' +
                         (lineIdx + 1) + ')">';
@@ -5188,7 +5297,7 @@ var StudyUI = {
         var totalLines = 0;
         if (part.originalSolution) {
             part.originalSolution.forEach(function(l) {
-                if (l.shown !== false) totalLines++;
+                if (l.shown) totalLines++;
             });
         }
         var totalCriteria = part.marking ? part.marking.length : 0;
@@ -5708,6 +5817,7 @@ var StudyUI = {
             ExamMode.active = false;
             ExamMode.state = "inactive";
             ExamMode.testAnswers = [];
+            ExamMode.examQuestions = [];
             if (ExamMode.timerInterval) {
                 clearInterval(ExamMode.timerInterval);
                 ExamMode.timerInterval = null;
@@ -5815,19 +5925,6 @@ var StudyUI = {
         }
         result += StudyUI._escapeHtml(text.substring(lastIndex));
         return result;
-    },
-
-    /**
-     * Collect [IMAGE: filename] references from text into a lookup object.
-     * @private
-     */
-    _collectImageRefs: function(text, lookup) {
-        if (!text) return;
-        var imgPattern = /\[IMAGE:\s*([^\]]+)\]/g;
-        var match;
-        while ((match = imgPattern.exec(text)) !== null) {
-            lookup[match[1].trim()] = true;
-        }
     }
 };
 
@@ -6743,7 +6840,7 @@ var DashboardUI = {
                 if (!part || !part.originalSolution) return;
 
                 var totalLines = part.originalSolution.filter(function(l) {
-                    return l.shown !== false;
+                    return l.shown;
                 }).length;
                 if (totalLines === 0) return;
 

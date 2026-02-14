@@ -4016,6 +4016,22 @@ body.dark-theme input[type="range"] {
     font-weight: 600;
 }
 
+.exam-prev-btn {
+    font-weight: 600;
+    background: var(--bg-secondary, #e0dcd4);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color, #d4d0c8);
+}
+
+.exam-prev-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary, #d4d0c8);
+}
+
+.exam-prev-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .exam-end-btn {
     background: var(--danger, #C62828) !important;
     color: #fff !important;
