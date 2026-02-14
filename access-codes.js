@@ -82,19 +82,69 @@ var AccessControl = {
         }).catch(function() { return null; });
     },
 
+    // ---- Cookie persistence (third fallback layer) ----
+    // Cookies often survive when localStorage and IndexedDB are wiped
+    // by ad blockers or school IT policies.
+
     /**
-     * Save credentials to BOTH localStorage and IndexedDB.
+     * Set a cookie with a 1-year expiry.
+     * @private
+     */
+    _setCookie: function(key, value) {
+        try {
+            var d = new Date();
+            d.setTime(d.getTime() + 365 * 24 * 60 * 60 * 1000);
+            document.cookie = encodeURIComponent(key) + "=" +
+                encodeURIComponent(value) +
+                ";expires=" + d.toUTCString() +
+                ";path=/;SameSite=Lax";
+        } catch(e) { /* silent */ }
+    },
+
+    /**
+     * Get a cookie value by key.
+     * @private
+     */
+    _getCookie: function(key) {
+        try {
+            var name = encodeURIComponent(key) + "=";
+            var parts = document.cookie.split(";");
+            for (var i = 0; i < parts.length; i++) {
+                var c = parts[i].trim();
+                if (c.indexOf(name) === 0) {
+                    return decodeURIComponent(c.substring(name.length));
+                }
+            }
+        } catch(e) { /* silent */ }
+        return null;
+    },
+
+    /**
+     * Remove a cookie.
+     * @private
+     */
+    _removeCookie: function(key) {
+        try {
+            document.cookie = encodeURIComponent(key) +
+                "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Lax";
+        } catch(e) { /* silent */ }
+    },
+
+    /**
+     * Save credentials to ALL THREE stores: localStorage, IndexedDB, and cookies.
      */
     _saveCredential: function(key, value) {
         localStorage.setItem(key, value);
+        AccessControl._setCookie(key, value);
         return AccessControl._idbSet(key, value);
     },
 
     /**
-     * Remove a credential from BOTH stores.
+     * Remove a credential from ALL THREE stores.
      */
     _removeCredential: function(key) {
         localStorage.removeItem(key);
+        AccessControl._removeCookie(key);
         return AccessControl._openCredDB().then(function(db) {
             if (!db) return;
             return new Promise(function(resolve) {
@@ -107,7 +157,8 @@ var AccessControl = {
     },
 
     /**
-     * Restore localStorage from IndexedDB if localStorage was cleared.
+     * Restore localStorage from IndexedDB and cookies if localStorage was cleared.
+     * Tries IndexedDB first, then cookies as fallback.
      * Returns a promise that resolves when sync is done.
      * @private
      */
@@ -119,17 +170,30 @@ var AccessControl = {
             return chain.then(function() {
                 var lsVal = localStorage.getItem(key);
                 if (lsVal) return; // already have it
+
+                // Try IndexedDB first
                 return AccessControl._idbGet(key).then(function(idbVal) {
                     if (idbVal) {
                         localStorage.setItem(key, idbVal);
+                        AccessControl._setCookie(key, idbVal);
                         anyRestored = true;
                         console.log("AccessControl: Restored " + key + " from IndexedDB");
+                        return;
+                    }
+
+                    // Try cookies as last resort
+                    var cookieVal = AccessControl._getCookie(key);
+                    if (cookieVal) {
+                        localStorage.setItem(key, cookieVal);
+                        AccessControl._idbSet(key, cookieVal);
+                        anyRestored = true;
+                        console.log("AccessControl: Restored " + key + " from cookie");
                     }
                 });
             });
         }, Promise.resolve()).then(function() {
             if (anyRestored) {
-                console.log("AccessControl: Credentials restored from IndexedDB backup");
+                console.log("AccessControl: Credentials restored from backup storage");
             }
         });
     },
@@ -184,24 +248,6 @@ var AccessControl = {
             firebase.initializeApp(FIREBASE_CONFIG);
         }
 
-        // Check for code in URL parameter (e.g. ?code=METH-526C-M4AU)
-        // This lets students bookmark their personalised URL as a fallback
-        // when browser extensions wipe localStorage/IndexedDB between sessions.
-        var urlParams = new URLSearchParams(window.location.search);
-        var urlCode = urlParams.get("code");
-        if (urlCode) {
-            urlCode = urlCode.trim().toUpperCase();
-            // Restore credentials from URL if localStorage is empty
-            if (!localStorage.getItem(AccessControl.CODE_KEY)) {
-                localStorage.setItem(AccessControl.CODE_KEY, urlCode);
-                // Generate a token if we don't have one
-                if (!localStorage.getItem(AccessControl.TOKEN_KEY)) {
-                    localStorage.setItem(AccessControl.TOKEN_KEY, AccessControl._generateToken());
-                }
-                console.log("AccessControl: Restored code from URL parameter: " + urlCode);
-            }
-        }
-
         // First, restore any credentials from IndexedDB if localStorage was cleared
         return AccessControl._restoreFromIDB().then(function() {
             // Check if this browser already has a claimed code
@@ -223,7 +269,6 @@ var AccessControl = {
                         } else {
                             console.log("AccessControl: Code verified online, access granted");
                         }
-                        AccessControl._setUrlCode(existingCode);
                         return { granted: true };
                     }
 
@@ -330,8 +375,6 @@ var AccessControl = {
                 if (result.alreadyMine) {
                     // Re-use existing claim
                     AccessControl._saveCredential(AccessControl.CODE_KEY, code);
-                    // Update URL so student can bookmark it
-                    AccessControl._setUrlCode(code);
                     screen.style.display = "none";
                     initApp();
                     return;
@@ -341,9 +384,6 @@ var AccessControl = {
                 var token = AccessControl._generateToken();
                 AccessControl._saveCredential(AccessControl.TOKEN_KEY, token);
                 AccessControl._saveCredential(AccessControl.CODE_KEY, code);
-
-                // Update URL so student can bookmark it
-                AccessControl._setUrlCode(code);
 
                 if (result.offline) {
                     // Firebase unreachable -- store code locally, will claim later
@@ -443,21 +483,6 @@ var AccessControl = {
         if (pending && code && name) {
             console.log("AccessControl: Retrying pending claim for " + code);
             AccessControl.claimCode(code, name);
-        }
-    },
-
-    /**
-     * Update the browser URL to include the code parameter (without reloading).
-     * This lets students bookmark their personalised URL.
-     * @private
-     */
-    _setUrlCode: function(code) {
-        try {
-            var url = new URL(window.location.href);
-            url.searchParams.set("code", code);
-            window.history.replaceState({}, "", url.toString());
-        } catch(e) {
-            // Silently fail if URL manipulation is not supported
         }
     },
 
