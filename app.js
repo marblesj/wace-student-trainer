@@ -282,9 +282,11 @@ var QuestionEngine = {
         var today = new Date();
         today.setHours(0, 0, 0, 0);
         var unlocked = {};
+        var hasSchedule = false;
 
         // Base schedule from schedule.js
         if (typeof TAUGHT_SCHEDULE !== "undefined" && TAUGHT_SCHEDULE.schedule) {
+            hasSchedule = true;
             TAUGHT_SCHEDULE.schedule.forEach(function(entry) {
                 var entryDate = new Date(entry.date + "T00:00:00");
                 if (aheadOfSchedule || entryDate <= today) {
@@ -297,6 +299,7 @@ var QuestionEngine = {
 
         // Imported schedule updates from IndexedDB
         if (scheduleUpdates && scheduleUpdates.length > 0) {
+            hasSchedule = true;
             scheduleUpdates.forEach(function(entry) {
                 var entryDate = new Date(entry.date + "T00:00:00");
                 if (aheadOfSchedule || entryDate <= today) {
@@ -304,6 +307,16 @@ var QuestionEngine = {
                         unlocked[pt] = true;
                     });
                 }
+            });
+        }
+
+        // FALLBACK: If no schedule found at all, unlock ALL problem types
+        // from the taxonomy so the app is still usable
+        if (!hasSchedule || Object.keys(unlocked).length === 0) {
+            console.warn("QuestionEngine: No schedule loaded or no PTs released yet. " +
+                "Unlocking ALL taxonomy problem types as fallback.");
+            QuestionEngine.allProblemTypes.forEach(function(pt) {
+                unlocked[pt] = true;
             });
         }
 
