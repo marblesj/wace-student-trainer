@@ -184,6 +184,24 @@ var AccessControl = {
             firebase.initializeApp(FIREBASE_CONFIG);
         }
 
+        // Check for code in URL parameter (e.g. ?code=METH-526C-M4AU)
+        // This lets students bookmark their personalised URL as a fallback
+        // when browser extensions wipe localStorage/IndexedDB between sessions.
+        var urlParams = new URLSearchParams(window.location.search);
+        var urlCode = urlParams.get("code");
+        if (urlCode) {
+            urlCode = urlCode.trim().toUpperCase();
+            // Restore credentials from URL if localStorage is empty
+            if (!localStorage.getItem(AccessControl.CODE_KEY)) {
+                localStorage.setItem(AccessControl.CODE_KEY, urlCode);
+                // Generate a token if we don't have one
+                if (!localStorage.getItem(AccessControl.TOKEN_KEY)) {
+                    localStorage.setItem(AccessControl.TOKEN_KEY, AccessControl._generateToken());
+                }
+                console.log("AccessControl: Restored code from URL parameter: " + urlCode);
+            }
+        }
+
         // First, restore any credentials from IndexedDB if localStorage was cleared
         return AccessControl._restoreFromIDB().then(function() {
             // Check if this browser already has a claimed code
@@ -205,9 +223,35 @@ var AccessControl = {
                         } else {
                             console.log("AccessControl: Code verified online, access granted");
                         }
+                        AccessControl._setUrlCode(existingCode);
                         return { granted: true };
                     }
-                    // Code was revoked or reassigned -- show code screen
+
+                    // Code is valid but not yet claimed in Firestore (e.g. school
+                    // blocked Firebase when student first entered the code).
+                    // Attempt to claim it now rather than wiping local credentials.
+                    if (result.valid && !result.alreadyMine) {
+                        console.log("AccessControl: Code unclaimed in Firestore, attempting to claim now");
+                        var nameForClaim = existingName || "Student";
+                        return AccessControl.claimCode(existingCode, nameForClaim)
+                            .then(function(claimResult) {
+                                if (claimResult.success) {
+                                    console.log("AccessControl: Late claim succeeded, access granted");
+                                    return { granted: true };
+                                }
+                                // Claim failed but we have local credentials -- still let them in
+                                console.warn("AccessControl: Late claim failed, granting from local credentials");
+                                return { granted: true };
+                            })
+                            .catch(function() {
+                                // Network issue during claim -- grant anyway from local
+                                console.warn("AccessControl: Late claim error, granting from local credentials");
+                                return { granted: true };
+                            });
+                    }
+
+                    // Code was genuinely revoked or taken by another student
+                    console.warn("AccessControl: Code invalid/revoked, requiring re-entry");
                     AccessControl._removeCredential(AccessControl.CODE_KEY);
                     AccessControl._removeCredential(AccessControl.TOKEN_KEY);
                     AccessControl._showCodeScreen();
@@ -286,6 +330,8 @@ var AccessControl = {
                 if (result.alreadyMine) {
                     // Re-use existing claim
                     AccessControl._saveCredential(AccessControl.CODE_KEY, code);
+                    // Update URL so student can bookmark it
+                    AccessControl._setUrlCode(code);
                     screen.style.display = "none";
                     initApp();
                     return;
@@ -295,6 +341,9 @@ var AccessControl = {
                 var token = AccessControl._generateToken();
                 AccessControl._saveCredential(AccessControl.TOKEN_KEY, token);
                 AccessControl._saveCredential(AccessControl.CODE_KEY, code);
+
+                // Update URL so student can bookmark it
+                AccessControl._setUrlCode(code);
 
                 if (result.offline) {
                     // Firebase unreachable -- store code locally, will claim later
@@ -394,6 +443,21 @@ var AccessControl = {
         if (pending && code && name) {
             console.log("AccessControl: Retrying pending claim for " + code);
             AccessControl.claimCode(code, name);
+        }
+    },
+
+    /**
+     * Update the browser URL to include the code parameter (without reloading).
+     * This lets students bookmark their personalised URL.
+     * @private
+     */
+    _setUrlCode: function(code) {
+        try {
+            var url = new URL(window.location.href);
+            url.searchParams.set("code", code);
+            window.history.replaceState({}, "", url.toString());
+        } catch(e) {
+            // Silently fail if URL manipulation is not supported
         }
     },
 
