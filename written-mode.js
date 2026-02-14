@@ -893,6 +893,32 @@ var WrittenMode = {
             html += '</div>';
         }
 
+        // Examiner comment and clarification
+        if (q.examinerComment) {
+            html += '<div class="examiner-comment">';
+            html += '<div class="examiner-label">' + '\uD83C\uDF93 Examiner Comment</div>';
+            html += '<p>' + StudyUI._escapeHtml(q.examinerComment) + '</p>';
+            html += '</div>';
+
+            var clarification = "";
+            for (var ci = q.parts.length - 1; ci >= 0; ci--) {
+                if (q.parts[ci].guidedSolution) {
+                    var extracted = StudyUI._extractExaminerContent(q.parts[ci].guidedSolution);
+                    if (extracted.clarification) {
+                        clarification = extracted.clarification;
+                        break;
+                    }
+                }
+            }
+            if (clarification) {
+                html += '<div class="examiner-clarification">';
+                html += '<div class="examiner-clarification-label">' +
+                    '\uD83D\uDCD6 This comment clarified</div>';
+                html += '<p>' + StudyUI._escapeHtml(clarification) + '</p>';
+                html += '</div>';
+            }
+        }
+
         // Per-part results
         result.parts.forEach(function(partResult, idx) {
             var questionPart = q.parts[idx];
@@ -1029,6 +1055,16 @@ var WrittenMode = {
                 });
 
                 html += '</div>';
+            }
+
+            // Guided walkthrough button + panel
+            if (questionPart.guidedSolution) {
+                html += '<div class="wm-guided-btn-wrap" id="guided-trigger-' + idx + '">';
+                html += '<button class="btn btn-outline wm-guided-btn" ' +
+                    'onclick="StudyUI.showPartGuided(' + idx + ')">' +
+                    '\uD83D\uDCD6 Show walkthrough</button>';
+                html += '</div>';
+                html += '<div class="guided-panel" id="sol-guided-' + idx + '" style="display:none;"></div>';
             }
 
             html += '</div>'; // .wm-part-result
