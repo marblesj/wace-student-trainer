@@ -1050,6 +1050,9 @@ var SessionEngine = {
     examQueueIndex: 0,        // current position in exam queue
     examAnswers: [],          // stored question data for review [{filename, questionData, targetProblemType}]
 
+    // Answer method
+    answerMethod: "paper",    // "paper" or "stylus"
+
     // Categorised problem type lists
     wrongList: [],
     confidenceList: [],
@@ -1099,6 +1102,9 @@ var SessionEngine = {
         SessionEngine.examQueueIndex = 0;
         SessionEngine.examAnswers = [];
 
+        // Answer method
+        SessionEngine.answerMethod = opts.answerMethod || "paper";
+
         // Set section filter on QuestionSelector
         QuestionSelector.sectionFilter = SessionEngine.sectionFilter;
         QuestionSelector.resetSession();
@@ -1112,6 +1118,8 @@ var SessionEngine = {
             topicFilter: topicFilter || null,
             sectionFilter: SessionEngine.sectionFilter,
             wrongListOnly: SessionEngine.wrongListOnly,
+            answerMethod: SessionEngine.answerMethod,
+            examMode: SessionEngine.examMode,
             questionsAttempted: 0,
             partsAttempted: 0,
             partsCorrect: 0,
@@ -1649,6 +1657,36 @@ var UI = {
                     if (countRow) {
                         countRow.style.display =
                             (btn.getAttribute("data-value") === "exam") ? "block" : "none";
+                    }
+                });
+            });
+        }
+
+        // Revise answer method toggle: show/hide stylus hint
+        var reviseAnswerGroup = document.getElementById("revise-answer-group");
+        if (reviseAnswerGroup) {
+            reviseAnswerGroup.querySelectorAll(".config-toggle").forEach(function(btn) {
+                btn.addEventListener("click", function() {
+                    var hint = document.getElementById("revise-stylus-hint");
+                    if (hint) {
+                        if (btn.getAttribute("data-value") === "stylus") {
+                            hint.style.display = "block";
+                            // Check for API key
+                            DB.get(STORE_CONFIG, "apiKey").then(function(rec) {
+                                if (!rec || !rec.value) {
+                                    hint.textContent = "No API key configured. Add one in Settings to use Stylus mode.";
+                                    hint.className = "config-hint config-hint-warn";
+                                } else {
+                                    hint.textContent = "AI will mark your handwritten answers.";
+                                    hint.className = "config-hint";
+                                }
+                            }).catch(function() {
+                                hint.textContent = "Requires an API key in Settings. AI will mark your handwritten answers.";
+                                hint.className = "config-hint";
+                            });
+                        } else {
+                            hint.style.display = "none";
+                        }
                     }
                 });
             });
@@ -3700,9 +3738,17 @@ var StudyUI = {
 // ============================================================================
 var ReviseUI = {
 
+    /** Currently selected topic and subtopic names */
+    _selectedTopic: null,
+    _selectedSubtopic: null,
+
+    /** Cached mastery map for the current refresh */
+    _masteryMap: null,
+    _unlockedSet: null,
+
     /**
-     * Refresh the topic tree on the Revise tab.
-     * Builds a collapsible tree from TAXONOMY_DATA with mastery indicators.
+     * Refresh the cascade selector on the Revise tab.
+     * Builds the topic column from TAXONOMY_DATA, filtered to unlocked PTs only.
      */
     refresh: function() {
         var container = document.getElementById("topic-tree-container");
@@ -3711,125 +3757,264 @@ var ReviseUI = {
 
         var taxonomy = QuestionEngine.taxonomyData;
         if (!taxonomy || Object.keys(taxonomy).length === 0) {
-            container.innerHTML = "";
+            container.style.display = "none";
             if (emptyHint) emptyHint.style.display = "block";
             return;
         }
+
+        // Build unlocked set
+        var unlockedSet = {};
+        QuestionEngine.unlockedProblemTypes.forEach(function(pt) {
+            unlockedSet[pt] = true;
+        });
+        ReviseUI._unlockedSet = unlockedSet;
+
+        // Check if any topics have unlocked PTs
+        var hasAny = false;
+        Object.keys(taxonomy).forEach(function(topic) {
+            var pts = ReviseUI._getProblemTypesForNode(taxonomy, topic, null, null);
+            if (pts.some(function(pt) { return unlockedSet[pt]; })) hasAny = true;
+        });
+
+        if (!hasAny) {
+            container.style.display = "none";
+            if (emptyHint) emptyHint.style.display = "block";
+            return;
+        }
+
+        container.style.display = "block";
         if (emptyHint) emptyHint.style.display = "none";
 
-        // Load mastery data to show indicators
+        // Load mastery, then build topic column
         DB.getAll(STORE_MASTERY).then(function(records) {
             var masteryMap = {};
             records.forEach(function(r) { masteryMap[r.problemType] = r; });
+            ReviseUI._masteryMap = masteryMap;
 
-            var unlockedSet = {};
-            QuestionEngine.unlockedProblemTypes.forEach(function(pt) {
-                unlockedSet[pt] = true;
-            });
-
-            var html = '<div class="topic-tree">';
-
-            var topics = Object.keys(taxonomy);
-            topics.forEach(function(topic) {
-                // Check if any problem types in this topic are unlocked
-                var topicPTs = ReviseUI._getProblemTypesForNode(taxonomy, topic, null, null);
-                var topicUnlocked = topicPTs.filter(function(pt) { return unlockedSet[pt]; });
-                if (topicUnlocked.length === 0) return;
-
-                var topicStats = ReviseUI._computeNodeStats(topicUnlocked, masteryMap);
-
-                html += '<div class="tt-topic">';
-                html += '<div class="tt-node tt-node-topic" data-filter="' +
-                    ReviseUI._esc(topic) + '" data-level="topic">';
-                html += '<span class="tt-expand-icon">' + SYMBOLS.ARROW_RIGHT + '</span>';
-                html += '<span class="tt-indicator ' + topicStats.cssClass + '"></span>';
-                html += '<span class="tt-label">' + ReviseUI._esc(topic) + '</span>';
-                html += '<span class="tt-meta">' + topicStats.summary + '</span>';
-                html += '<button class="btn btn-sm tt-revise-btn" data-filter="' +
-                    ReviseUI._esc(topic) + '" data-level="topic">Revise</button>';
-                html += '</div>';
-
-                // Subtopics (collapsed by default)
-                html += '<div class="tt-children" style="display:none;">';
-                var subtopics = Object.keys(taxonomy[topic]);
-                subtopics.forEach(function(subtopic) {
-                    var subPTs = ReviseUI._getProblemTypesForNode(taxonomy, topic, subtopic, null);
-                    var subUnlocked = subPTs.filter(function(pt) { return unlockedSet[pt]; });
-                    if (subUnlocked.length === 0) return;
-
-                    var subStats = ReviseUI._computeNodeStats(subUnlocked, masteryMap);
-
-                    html += '<div class="tt-subtopic">';
-                    html += '<div class="tt-node tt-node-subtopic" data-filter="' +
-                        ReviseUI._esc(subtopic) + '" data-level="subtopic">';
-                    html += '<span class="tt-expand-icon">' + SYMBOLS.ARROW_RIGHT + '</span>';
-                    html += '<span class="tt-indicator ' + subStats.cssClass + '"></span>';
-                    html += '<span class="tt-label">' + ReviseUI._esc(subtopic) + '</span>';
-                    html += '<span class="tt-meta">' + subStats.summary + '</span>';
-                    html += '<button class="btn btn-sm tt-revise-btn" data-filter="' +
-                        ReviseUI._esc(subtopic) + '" data-level="subtopic">Revise</button>';
-                    html += '</div>';
-
-                    // Concept categories
-                    html += '<div class="tt-children" style="display:none;">';
-                    var concepts = Object.keys(taxonomy[topic][subtopic]);
-                    concepts.forEach(function(concept) {
-                        var cPTs = taxonomy[topic][subtopic][concept] || [];
-                        var cUnlocked = cPTs.filter(function(pt) { return unlockedSet[pt]; });
-                        if (cUnlocked.length === 0) return;
-
-                        var cStats = ReviseUI._computeNodeStats(cUnlocked, masteryMap);
-
-                        html += '<div class="tt-concept">';
-                        html += '<div class="tt-node tt-node-concept" data-filter="' +
-                            ReviseUI._esc(concept) + '" data-level="concept">';
-                        html += '<span class="tt-expand-icon tt-leaf"></span>';
-                        html += '<span class="tt-indicator ' + cStats.cssClass + '"></span>';
-                        html += '<span class="tt-label">' + ReviseUI._esc(concept) + '</span>';
-                        html += '<span class="tt-meta">' + cStats.summary + '</span>';
-                        html += '<button class="btn btn-sm tt-revise-btn" data-filter="' +
-                            ReviseUI._esc(concept) + '" data-level="concept">Revise</button>';
-                        html += '</div>';
-
-                        // Problem types listed inline
-                        if (cUnlocked.length > 0) {
-                            html += '<div class="tt-pt-list">';
-                            cUnlocked.forEach(function(pt) {
-                                var rec = masteryMap[pt];
-                                var status = rec ? rec.status : "new";
-                                var icon = ReviseUI._statusIcon(status);
-                                html += '<span class="tt-pt-item tt-pt-' + status + '" title="' +
-                                    ReviseUI._esc(pt) + ' (' + status + ')">' +
-                                    icon + ' ' + ReviseUI._esc(pt) + '</span>';
-                            });
-                            html += '</div>';
-                        }
-
-                        html += '</div>'; // tt-concept
-                    });
-                    html += '</div>'; // tt-children (concepts)
-                    html += '</div>'; // tt-subtopic
-                });
-                html += '</div>'; // tt-children (subtopics)
-                html += '</div>'; // tt-topic
-            });
-
-            html += '</div>'; // topic-tree
-
-            container.innerHTML = html;
-            ReviseUI._bindTreeEvents(container);
+            ReviseUI._renderTopics();
+            ReviseUI._clearSubtopics();
+            ReviseUI._clearProblemTypes();
+            ReviseUI._hideActionBar();
+            ReviseUI._selectedTopic = null;
+            ReviseUI._selectedSubtopic = null;
         });
+    },
+
+    /**
+     * Render the topics column.
+     * @private
+     */
+    _renderTopics: function() {
+        var list = document.getElementById("cascade-topic-list");
+        if (!list) return;
+
+        var taxonomy = QuestionEngine.taxonomyData;
+        var unlockedSet = ReviseUI._unlockedSet;
+        var masteryMap = ReviseUI._masteryMap;
+        var html = "";
+
+        Object.keys(taxonomy).forEach(function(topic) {
+            var topicPTs = ReviseUI._getProblemTypesForNode(taxonomy, topic, null, null);
+            var topicUnlocked = topicPTs.filter(function(pt) { return unlockedSet[pt]; });
+            if (topicUnlocked.length === 0) return;
+
+            var stats = ReviseUI._computeNodeStats(topicUnlocked, masteryMap);
+
+            html += '<div class="cascade-item" data-topic="' + ReviseUI._esc(topic) + '">';
+            html += '<span class="cascade-indicator ' + stats.cssClass.replace("tt-ind-", "cascade-ind-") + '"></span>';
+            html += '<span class="cascade-label">' + ReviseUI._esc(topic) + '</span>';
+            html += '<span class="cascade-meta">' + topicUnlocked.length + '</span>';
+            html += '</div>';
+        });
+
+        list.innerHTML = html;
+
+        // Bind click events
+        list.querySelectorAll(".cascade-item").forEach(function(item) {
+            item.addEventListener("click", function() {
+                var topic = item.getAttribute("data-topic");
+                ReviseUI._selectTopic(topic, list);
+            });
+        });
+    },
+
+    /**
+     * Handle topic selection — populate subtopics column.
+     * @private
+     */
+    _selectTopic: function(topic, topicList) {
+        // Highlight selection
+        topicList.querySelectorAll(".cascade-item").forEach(function(el) {
+            el.classList.toggle("cascade-selected",
+                el.getAttribute("data-topic") === topic);
+        });
+
+        ReviseUI._selectedTopic = topic;
+        ReviseUI._selectedSubtopic = null;
+
+        var taxonomy = QuestionEngine.taxonomyData;
+        var unlockedSet = ReviseUI._unlockedSet;
+        var masteryMap = ReviseUI._masteryMap;
+
+        var subList = document.getElementById("cascade-subtopic-list");
+        if (!subList) return;
+
+        var subtopics = taxonomy[topic];
+        if (!subtopics) {
+            subList.innerHTML = '<div class="cascade-empty">No subtopics</div>';
+            ReviseUI._clearProblemTypes();
+            return;
+        }
+
+        var html = "";
+        Object.keys(subtopics).forEach(function(subtopic) {
+            var subPTs = ReviseUI._getProblemTypesForNode(taxonomy, topic, subtopic, null);
+            var subUnlocked = subPTs.filter(function(pt) { return unlockedSet[pt]; });
+            if (subUnlocked.length === 0) return;
+
+            var stats = ReviseUI._computeNodeStats(subUnlocked, masteryMap);
+
+            html += '<div class="cascade-item" data-subtopic="' + ReviseUI._esc(subtopic) + '">';
+            html += '<span class="cascade-indicator ' + stats.cssClass.replace("tt-ind-", "cascade-ind-") + '"></span>';
+            html += '<span class="cascade-label">' + ReviseUI._esc(subtopic) + '</span>';
+            html += '<span class="cascade-meta">' + subUnlocked.length + '</span>';
+            html += '</div>';
+        });
+
+        subList.innerHTML = html || '<div class="cascade-empty">No subtopics available</div>';
+
+        // Bind click events
+        subList.querySelectorAll(".cascade-item").forEach(function(item) {
+            item.addEventListener("click", function() {
+                var subtopic = item.getAttribute("data-subtopic");
+                ReviseUI._selectSubtopic(subtopic, subList);
+            });
+        });
+
+        // Clear PT column and show action bar for topic-level revision
+        ReviseUI._clearProblemTypes();
+        ReviseUI._showActionBar(topic, "topic");
+    },
+
+    /**
+     * Handle subtopic selection — populate problem types column.
+     * @private
+     */
+    _selectSubtopic: function(subtopic, subList) {
+        // Highlight selection
+        subList.querySelectorAll(".cascade-item").forEach(function(el) {
+            el.classList.toggle("cascade-selected",
+                el.getAttribute("data-subtopic") === subtopic);
+        });
+
+        ReviseUI._selectedSubtopic = subtopic;
+
+        var taxonomy = QuestionEngine.taxonomyData;
+        var topic = ReviseUI._selectedTopic;
+        var unlockedSet = ReviseUI._unlockedSet;
+        var masteryMap = ReviseUI._masteryMap;
+
+        var ptList = document.getElementById("cascade-pt-list");
+        if (!ptList || !topic) return;
+
+        var concepts = taxonomy[topic] && taxonomy[topic][subtopic];
+        if (!concepts) {
+            ptList.innerHTML = '<div class="cascade-empty">No problem types</div>';
+            return;
+        }
+
+        var html = "";
+        Object.keys(concepts).forEach(function(concept) {
+            var pts = concepts[concept] || [];
+            var unlockedPTs = pts.filter(function(pt) { return unlockedSet[pt]; });
+            if (unlockedPTs.length === 0) return;
+
+            // Concept header
+            html += '<div class="cascade-pt-concept">' + ReviseUI._esc(concept) + '</div>';
+
+            unlockedPTs.forEach(function(pt) {
+                var rec = masteryMap[pt];
+                var status = rec ? rec.status : "new";
+                var statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+                var accuracy = "";
+                if (rec && rec.totalAttempts > 0) {
+                    accuracy = Math.round((rec.correctAttempts / rec.totalAttempts) * 100) + "%";
+                }
+
+                html += '<div class="cascade-pt-item cascade-pt-' + status + '">';
+                html += '<span class="cascade-indicator cascade-ind-' +
+                    (status === "mastered" ? "mastered" :
+                     status === "struggling" ? "struggling" :
+                     status === "improving" ? "partial" : "new") + '"></span>';
+                html += '<span class="cascade-label">' + ReviseUI._esc(pt) + '</span>';
+                html += '<span class="cascade-pt-status">' +
+                    (accuracy ? accuracy : statusLabel) + '</span>';
+                html += '</div>';
+            });
+        });
+
+        ptList.innerHTML = html || '<div class="cascade-empty">No problem types available</div>';
+
+        // Update action bar for subtopic-level revision
+        ReviseUI._showActionBar(subtopic, "subtopic");
+    },
+
+    /**
+     * Clear the subtopics column.
+     * @private
+     */
+    _clearSubtopics: function() {
+        var list = document.getElementById("cascade-subtopic-list");
+        if (list) list.innerHTML = '<div class="cascade-empty">Select a topic</div>';
+    },
+
+    /**
+     * Clear the problem types column.
+     * @private
+     */
+    _clearProblemTypes: function() {
+        var list = document.getElementById("cascade-pt-list");
+        if (list) list.innerHTML = '<div class="cascade-empty">Select a subtopic</div>';
+    },
+
+    /**
+     * Show the revise action bar.
+     * @private
+     */
+    _showActionBar: function(filterName, level) {
+        var bar = document.getElementById("revise-action-bar");
+        var label = document.getElementById("revise-action-label");
+        var btn = document.getElementById("revise-start-btn");
+        if (!bar) return;
+
+        if (label) label.textContent = "Revising: " + filterName;
+        bar.style.display = "flex";
+
+        // Rebind click (remove old listener by cloning)
+        if (btn) {
+            var newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            newBtn.addEventListener("click", function() {
+                ReviseUI.startRevision(filterName, level);
+            });
+        }
+    },
+
+    /**
+     * Hide the action bar.
+     * @private
+     */
+    _hideActionBar: function() {
+        var bar = document.getElementById("revise-action-bar");
+        if (bar) bar.style.display = "none";
     },
 
     /**
      * Start a revision session for a given filter.
      *
-     * @param {string} filter - topic, subtopic, or concept name
-     * @param {string} level - "topic", "subtopic", or "concept"
-     */
     /**
      * Start a revision session for a given filter.
-     * Reads mode/section config from the revise config panel.
+     * Reads mode/section/answer-method config from the revise config panel.
      *
      * @param {string} filter - topic, subtopic, or concept name
      * @param {string} level - "topic", "subtopic", or "concept"
@@ -3838,9 +4023,15 @@ var ReviseUI = {
         // Read config from the revise panel
         var modeGroup = document.getElementById("revise-mode-group");
         var sectionGroup = document.getElementById("revise-section-group");
+        var answerGroup = document.getElementById("revise-answer-group");
         var isExamMode = false;
         var sectionFilter = "mix";
+        var answerMethod = "paper";
 
+        if (answerGroup) {
+            var activeAnswer = answerGroup.querySelector('[aria-pressed="true"]');
+            if (activeAnswer) answerMethod = activeAnswer.getAttribute("data-value");
+        }
         if (modeGroup) {
             var activeMode = modeGroup.querySelector('[aria-pressed="true"]');
             if (activeMode) isExamMode = (activeMode.getAttribute("data-value") === "exam");
@@ -3871,7 +4062,8 @@ var ReviseUI = {
             goal: goal,
             sectionFilter: sectionFilter,
             wrongListOnly: false,
-            examMode: isExamMode
+            examMode: isExamMode,
+            answerMethod: answerMethod
         }).then(function() {
             // Check if there are any questions available
             var totalAvailable = SessionEngine.wrongList.length +
@@ -4234,44 +4426,6 @@ var ReviseUI = {
             case "review": return SYMBOLS.REVIEW;
             default: return SYMBOLS.BULLET;
         }
-    },
-
-    /**
-     * Bind expand/collapse and revise button events on the tree.
-     * @private
-     */
-    _bindTreeEvents: function(container) {
-        // Expand/collapse on node click
-        container.querySelectorAll(".tt-node").forEach(function(node) {
-            var expandIcon = node.querySelector(".tt-expand-icon");
-            if (!expandIcon || expandIcon.classList.contains("tt-leaf")) return;
-
-            var clickTarget = node;
-            clickTarget.style.cursor = "pointer";
-            clickTarget.addEventListener("click", function(e) {
-                // Don't toggle if clicking the revise button
-                if (e.target.classList.contains("tt-revise-btn")) return;
-
-                var parent = node.parentElement;
-                var children = parent.querySelector(".tt-children");
-                if (!children) return;
-
-                var isOpen = children.style.display !== "none";
-                children.style.display = isOpen ? "none" : "block";
-                expandIcon.textContent = isOpen ? SYMBOLS.ARROW_RIGHT : "\u25BC";
-                expandIcon.classList.toggle("tt-expanded", !isOpen);
-            });
-        });
-
-        // Revise buttons
-        container.querySelectorAll(".tt-revise-btn").forEach(function(btn) {
-            btn.addEventListener("click", function(e) {
-                e.stopPropagation();
-                var filter = btn.getAttribute("data-filter");
-                var level = btn.getAttribute("data-level");
-                ReviseUI.startRevision(filter, level);
-            });
-        });
     },
 
     /**

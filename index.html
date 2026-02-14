@@ -193,6 +193,18 @@
                     </div>
                     <div class="revise-config">
                         <div class="config-row">
+                            <label>Answer Method:</label>
+                            <div class="config-toggle-group" id="revise-answer-group">
+                                <button class="config-toggle" data-value="paper"
+                                        aria-pressed="true">Paper</button>
+                                <button class="config-toggle" data-value="stylus"
+                                        aria-pressed="false">Stylus (Written)</button>
+                            </div>
+                            <p class="config-hint" id="revise-stylus-hint" style="display:none;">
+                                Requires an API key in Settings. AI will mark your handwritten answers.
+                            </p>
+                        </div>
+                        <div class="config-row">
                             <label>Mode:</label>
                             <div class="config-toggle-group" id="revise-mode-group">
                                 <button class="config-toggle" data-value="interactive"
@@ -222,10 +234,33 @@
                             <span class="config-estimate" id="revise-exam-available"></span>
                         </div>
                     </div>
-                    <div id="topic-tree-container"></div>
+                    <div id="topic-tree-container">
+                        <div class="revise-cascade">
+                            <div class="cascade-col">
+                                <div class="cascade-header">Topic</div>
+                                <div class="cascade-list" id="cascade-topic-list"></div>
+                            </div>
+                            <div class="cascade-col">
+                                <div class="cascade-header">Subtopic</div>
+                                <div class="cascade-list" id="cascade-subtopic-list">
+                                    <div class="cascade-empty">Select a topic</div>
+                                </div>
+                            </div>
+                            <div class="cascade-col">
+                                <div class="cascade-header">Problem Types</div>
+                                <div class="cascade-list" id="cascade-pt-list">
+                                    <div class="cascade-empty">Select a subtopic</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="revise-action-bar" id="revise-action-bar" style="display:none;">
+                            <span class="revise-action-label" id="revise-action-label"></span>
+                            <button class="btn btn-primary btn-large" id="revise-start-btn">Revise Selected</button>
+                        </div>
+                    </div>
                     <div id="revise-empty-hint" class="revise-no-questions" style="display:none;">
-                        <h3>No topics available yet</h3>
-                        <p>Complete some study sessions first to unlock topics for revision.</p>
+                        <h3>No topics released yet</h3>
+                        <p>Your teacher hasn't released any topics in the schedule yet, or the schedule file may not be loaded.</p>
                         <button class="btn btn-primary" onclick="UI.showTab('study')">Start Studying</button>
                     </div>
                 </div>
