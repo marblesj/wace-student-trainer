@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schedule Builder — WACE Methods Study Trainer</title>
+<script>
+window.MathJax = {
+    tex: {
+        inlineMath: [['$', '$']],
+        processEscapes: true
+    },
+    options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+    }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+:root {
+    --bg: #faf8f5;
+    --surface: #ffffff;
+    --border: #e2ddd5;
+    --text: #2c2825;
+    --text-secondary: #6b6460;
+    --text-muted: #9a9490;
+    --accent: #b8860b;
+    --accent-light: #f5eed9;
+    --accent-dark: #8a6508;
+    --success: #1a7a4c;
+    --success-light: #e8f5ee;
+    --danger: #c0392b;
+    --danger-light: #fce8e6;
+    --blue: #2563eb;
+    --blue-light: #eff6ff;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+}
+
+.app-header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--accent);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow);
+}
+
+.app-header h1 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--accent-dark);
+}
+
+.header-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: var(--mono);
+    white-space: nowrap;
+}
+
+.stat-chip.enabled { background: var(--success-light); color: var(--success); }
+.stat-chip.questions { background: var(--blue-light); color: var(--blue); }
+.stat-chip.total { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
+
+.toolbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 64px;
+    z-index: 99;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-family: var(--font);
+    outline: none;
+    transition: border-color 0.2s;
+}
+.search-box:focus { border-color: var(--accent); }
+
+.btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font);
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.btn:hover { background: var(--bg); }
+
+.btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-dark); }
+
+.btn-danger {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+.btn-danger:hover { background: var(--danger-light); }
+
+.btn-success {
+    color: var(--success);
+    border-color: var(--success);
+}
+.btn-success:hover { background: var(--success-light); }
+
+.tree-container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+/* Tree nodes */
+.topic-node {
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.topic-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+    background: linear-gradient(135deg, var(--accent-light) 0%, var(--surface) 100%);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+.topic-header:hover { filter: brightness(0.97); }
+
+.topic-header .arrow {
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+    color: var(--accent);
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+}
+.topic-header.expanded .arrow { transform: rotate(90deg); }
+
+.topic-header .topic-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex: 1;
+}
+
+.topic-header .topic-count {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.topic-body { display: none; }
+.topic-node.open .topic-body { display: block; }
+
+.subtopic-node {
+    border-top: 1px solid var(--border);
+}
+
+.subtopic-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px 10px 32px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+.subtopic-header:hover { background: var(--bg); }
+
+.subtopic-header .arrow {
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+}
+.subtopic-header.expanded .arrow { transform: rotate(90deg); }
+
+.subtopic-header .subtopic-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    flex: 1;
+}
+
+.subtopic-header .subtopic-count {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.subtopic-body { display: none; }
+.subtopic-node.open .subtopic-body { display: block; }
+
+.concept-section {
+    padding: 6px 16px 6px 48px;
+}
+
+.concept-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+
+.concept-name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    flex: 1;
+}
+
+.concept-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.concept-actions button {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font);
+    transition: all 0.15s;
+}
+.concept-actions button:hover { background: var(--bg); }
+
+/* Problem type rows */
+.pt-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0 5px 16px;
+    border-radius: 4px;
+    transition: background 0.1s;
+}
+.pt-row:hover { background: var(--accent-light); }
+.pt-row.hidden { display: none; }
+
+.pt-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.pt-row label {
+    flex: 1;
+    font-size: 0.85rem;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.pt-row .pt-badge {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.pt-badge.has-parts { background: var(--blue-light); color: var(--blue); }
+.pt-badge.mojibake { background: #fef3c7; color: #92400e; font-size: 0.6rem; }
+
+/* Settings panel */
+.settings-panel {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.settings-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+}
+
+.settings-card h3 {
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+    color: var(--accent-dark);
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.settings-row label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    min-width: 120px;
+}
+
+.settings-row input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-family: var(--font);
+    outline: none;
+}
+.settings-row input:focus { border-color: var(--accent); }
+
+/* Export area */
+.export-area {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+}
+
+.export-card {
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+.export-card h3 {
+    margin-bottom: 8px;
+    color: var(--accent-dark);
+}
+
+.export-card p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.export-btns {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.export-preview {
+    margin-top: 16px;
+    text-align: left;
+}
+
+.export-preview pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    overflow-x: auto;
+    max-height: 300px;
+    line-height: 1.6;
+}
+
+/* Node checkbox (topic/subtopic level) */
+.node-cb {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .app-header { padding: 12px 16px; }
+    .toolbar { padding: 10px 16px; }
+    .tree-container, .settings-panel, .export-area { padding-left: 12px; padding-right: 12px; }
+    .subtopic-header { padding-left: 24px; }
+    .concept-section { padding-left: 32px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+    <h1>⚙ Schedule Builder</h1>
+    <div class="header-stats">
+        <span class="stat-chip enabled" id="stat-enabled">0 enabled</span>
+        <span class="stat-chip questions" id="stat-questions">0 questions</span>
+        <span class="stat-chip total" id="stat-total">348 total types</span>
+    </div>
+</div>
+
+<div class="toolbar">
+    <input type="text" class="search-box" id="search-box" placeholder="Search problem types...">
+    <button class="btn" onclick="expandAll()">Expand All</button>
+    <button class="btn" onclick="collapseAll()">Collapse All</button>
+    <button class="btn btn-success" onclick="selectAll()">Select All</button>
+    <button class="btn btn-danger" onclick="deselectAll()">Deselect All</button>
+    <button class="btn btn-primary" onclick="downloadSchedule()">⭳ Download schedule.js</button>
+</div>
+
+<div class="settings-panel">
+    <div class="settings-card">
+        <h3>Class Settings</h3>
+        <div class="settings-row">
+            <label>Class Name</label>
+            <input type="text" id="class-name" value="">
+        </div>
+        <div class="settings-row">
+            <label>Teacher Name</label>
+            <input type="text" id="teacher-name" value="">
+        </div>
+        <div class="settings-row">
+            <label>Mark Endpoint</label>
+            <input type="text" id="mark-endpoint" value="">
+        </div>
+        <div class="settings-row">
+            <label>SymPy Endpoint</label>
+            <input type="text" id="sympy-endpoint" value="">
+        </div>
+    </div>
+</div>
+
+<div class="tree-container" id="tree-container"></div>
+
+<div class="export-area">
+    <div class="export-card">
+        <h3>Export Schedule</h3>
+        <p>Download the updated schedule.js, then push to GitHub to deploy.</p>
+        <div class="export-btns">
+            <button class="btn btn-primary" onclick="downloadSchedule()">⭳ Download schedule.js</button>
+            <button class="btn" onclick="togglePreview()">Preview Output</button>
+            <button class="btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+        </div>
+        <div class="export-preview" id="export-preview" style="display:none;">
+            <pre id="preview-code"></pre>
+        </div>
+    </div>
+</div>
+
+<script src="data_bundle.js"></script>
+
+<script>
+// ============================================================
+// DATA (derived from data_bundle.js at runtime)
+// ============================================================
+var TAXONOMY = (typeof TAXONOMY_DATA !== "undefined") ? TAXONOMY_DATA : {};
+
+// Build Q_PT_SETS and PT_COUNTS from QUESTIONS_DATA
+var Q_PT_SETS = {};
+var PT_COUNTS = {};
+if (typeof QUESTIONS_DATA !== "undefined") {
+    Object.keys(QUESTIONS_DATA).forEach(function(fname) {
+        var q = QUESTIONS_DATA[fname];
+        if (!q.parts) return;
+        var pts = [];
+        q.parts.forEach(function(p) {
+            if (p.problemType && pts.indexOf(p.problemType) === -1) {
+                pts.push(p.problemType);
+            }
+        });
+        Q_PT_SETS[fname] = pts;
+        pts.forEach(function(pt) {
+            PT_COUNTS[pt] = (PT_COUNTS[pt] || 0) + 1;
+        });
+    });
+}
+
+
+var ENABLED = ["Chain rule differentiation", "Product rule differentiation", "Quotient rule differentiation", "Differentiation problem", "Differentiating polynomial composite function using chain rule", "Differentiating square root of linear function", "Differentiating $x^n \\cdot e^{f(x)}$ using product rule", "Differentiating $x^n \\cdot \\ln(f(x))$ using product rule", "Differentiating $x \\cdot e^{x^2}$ using product rule with chain rule", "Differentiating a trigonometric quotient using quotient rule", "Differentiating polynomial rational function using quotient rule", "Differentiating composite function with square root and trigonometric function", "Differentiating product of polynomial and trigonometric function using product rule", "Differentiating product of exponential and trigonometric function using product rule", "Differentiating exponential rational function using quotient rule to find maximum", "Differentiating exponential/trigonometric quotient using quotient rule and evaluating", "Finding rate of change by differentiation", "Reading derivative from graph at a point", "Evaluating derivative of composition using chain rule with graph values", "Evaluating derivative of product using product rule with graph values", "Evaluating derivative of quotient using quotient rule with table values", "Showing derivative of composite function using chain rule and prior result (hence show that)", "Showing derivative of quotient with exponential denominator using quotient rule", "Proving trigonometric derivative identity using quotient rule (show that)"];
+var SCHEDULE_META = {"className": "12 Methods Per 2 \u2014 2026", "teacherName": "Mr Smith", "markEndpoint": "https://australia-southeast1-wace-trainer.cloudfunctions.net/mark", "sympyEndpoint": "https://australia-southeast1-wace-trainer.cloudfunctions.net/verify"};
+
+// ============================================================
+// STATE
+// ============================================================
+var checkedTypes = {};
+ENABLED.forEach(function(pt) { checkedTypes[pt] = true; });
+
+// Identify mojibake types
+var MOJIBAKE_TYPES = {};
+Object.keys(PT_COUNTS).forEach(function(pt) {
+    for (var i = 0; i < pt.length; i++) {
+        if (pt.charCodeAt(i) > 127) {
+            MOJIBAKE_TYPES[pt] = true;
+            break;
+        }
+    }
+});
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener("DOMContentLoaded", function() {
+    // Populate settings
+    document.getElementById("class-name").value = SCHEDULE_META.className || "";
+    document.getElementById("teacher-name").value = SCHEDULE_META.teacherName || "";
+    document.getElementById("mark-endpoint").value = SCHEDULE_META.markEndpoint || "";
+    document.getElementById("sympy-endpoint").value = SCHEDULE_META.sympyEndpoint || "";
+
+    buildTree();
+    updateStats();
+
+    document.getElementById("search-box").addEventListener("input", onSearch);
+});
+
+// ============================================================
+// BUILD TREE
+// ============================================================
+function buildTree() {
+    var container = document.getElementById("tree-container");
+    var html = "";
+
+    var topics = Object.keys(TAXONOMY);
+    topics.forEach(function(topic, tIdx) {
+        var subtopics = TAXONOMY[topic];
+        var topicPTs = getAllPTsForTopic(topic);
+        var enabledInTopic = topicPTs.filter(function(pt) { return checkedTypes[pt]; }).length;
+
+        html += '<div class="topic-node" id="topic-' + tIdx + '">';
+        html += '<div class="topic-header" onclick="toggleNode(this)">';
+        html += '<input type="checkbox" class="node-cb" data-level="topic" data-topic="' +
+            esc(topic) + '" onclick="event.stopPropagation(); toggleTopicCB(this)" ' +
+            (enabledInTopic === topicPTs.length && topicPTs.length > 0 ? 'checked' : '') +
+            (enabledInTopic > 0 && enabledInTopic < topicPTs.length ? ' class="node-cb" style="opacity:0.6"' : '') + '>';
+        html += '<span class="arrow">\u25B6</span>';
+        html += '<span class="topic-name">' + esc(topic) + '</span>';
+        html += '<span class="topic-count">' + enabledInTopic + '/' + topicPTs.length + ' types</span>';
+        html += '</div>';
+        html += '<div class="topic-body">';
+
+        var stKeys = Object.keys(subtopics);
+        stKeys.forEach(function(subtopic, sIdx) {
+            var concepts = subtopics[subtopic];
+            var stPTs = getAllPTsForSubtopic(topic, subtopic);
+            var enabledInST = stPTs.filter(function(pt) { return checkedTypes[pt]; }).length;
+
+            html += '<div class="subtopic-node" id="st-' + tIdx + '-' + sIdx + '">';
+            html += '<div class="subtopic-header" onclick="toggleNode(this)">';
+            html += '<input type="checkbox" class="node-cb" data-level="subtopic" data-topic="' +
+                esc(topic) + '" data-subtopic="' + esc(subtopic) + '" ' +
+                'onclick="event.stopPropagation(); toggleSubtopicCB(this)" ' +
+                (enabledInST === stPTs.length && stPTs.length > 0 ? 'checked' : '') + '>';
+            html += '<span class="arrow">\u25B6</span>';
+            html += '<span class="subtopic-name">' + esc(subtopic) + '</span>';
+            html += '<span class="subtopic-count">' + enabledInST + '/' + stPTs.length + '</span>';
+            html += '</div>';
+            html += '<div class="subtopic-body">';
+
+            var cKeys = Object.keys(concepts);
+            cKeys.forEach(function(concept) {
+                var pts = concepts[concept];
+                html += '<div class="concept-section">';
+                html += '<div class="concept-header">';
+                html += '<span class="concept-name">' + esc(concept) + ' (' + pts.length + ')</span>';
+                html += '<div class="concept-actions">';
+                html += '<button onclick="selectConcept(this, \'' + escAttr(topic) + '\', \'' +
+                    escAttr(subtopic) + '\', \'' + escAttr(concept) + '\')">All</button>';
+                html += '<button onclick="deselectConcept(this, \'' + escAttr(topic) + '\', \'' +
+                    escAttr(subtopic) + '\', \'' + escAttr(concept) + '\')">None</button>';
+                html += '</div>';
+                html += '</div>';
+
+                pts.forEach(function(pt) {
+                    var id = 'pt-' + hashStr(pt);
+                    var count = PT_COUNTS[pt] || 0;
+                    var isMoji = MOJIBAKE_TYPES[pt] ? true : false;
+
+                    html += '<div class="pt-row" data-pt="' + escAttr(pt) + '">';
+                    html += '<input type="checkbox" id="' + id + '" ' +
+                        (checkedTypes[pt] ? 'checked' : '') +
+                        ' onchange="onPTChange(this, \'' + escAttr(pt) + '\')">';
+                    html += '<label for="' + id + '">' + esc(pt) + '</label>';
+                    if (isMoji) {
+                        html += '<span class="pt-badge mojibake">encoding issue</span>';
+                    }
+                    html += '<span class="pt-badge has-parts">' + count + ' part' + (count !== 1 ? 's' : '') + '</span>';
+                    html += '</div>';
+                });
+
+                html += '</div>';
+            });
+
+            html += '</div></div>';
+        });
+
+        html += '</div></div>';
+    });
+
+    container.innerHTML = html;
+    typesetMath();
+}
+
+// ============================================================
+// MATHJAX RE-RENDER
+// ============================================================
+function typesetMath() {
+    if (typeof MathJax !== "undefined" && MathJax.typesetPromise) {
+        MathJax.typesetPromise().catch(function(err) {
+            console.warn("MathJax typeset error:", err);
+        });
+    }
+}
+
+// ============================================================
+// TREE INTERACTIONS
+// ============================================================
+function toggleNode(headerEl) {
+    var node = headerEl.parentElement;
+    node.classList.toggle("open");
+    headerEl.classList.toggle("expanded");
+}
+
+function toggleTopicCB(cb) {
+    var topic = cb.dataset.topic;
+    var pts = getAllPTsForTopic(topic);
+    var checked = cb.checked;
+    pts.forEach(function(pt) {
+        if (checked) checkedTypes[pt] = true;
+        else delete checkedTypes[pt];
+    });
+    buildTree();
+    updateStats();
+}
+
+function toggleSubtopicCB(cb) {
+    var topic = cb.dataset.topic;
+    var subtopic = cb.dataset.subtopic;
+    var pts = getAllPTsForSubtopic(topic, subtopic);
+    var checked = cb.checked;
+    pts.forEach(function(pt) {
+        if (checked) checkedTypes[pt] = true;
+        else delete checkedTypes[pt];
+    });
+    buildTree();
+    updateStats();
+}
+
+function selectConcept(btn, topic, subtopic, concept) {
+    var pts = TAXONOMY[topic][subtopic][concept] || [];
+    pts.forEach(function(pt) { checkedTypes[pt] = true; });
+    buildTree();
+    updateStats();
+}
+
+function deselectConcept(btn, topic, subtopic, concept) {
+    var pts = TAXONOMY[topic][subtopic][concept] || [];
+    pts.forEach(function(pt) { delete checkedTypes[pt]; });
+    buildTree();
+    updateStats();
+}
+
+function onPTChange(cb, pt) {
+    if (cb.checked) checkedTypes[pt] = true;
+    else delete checkedTypes[pt];
+    updateStats();
+    // Update parent counts in header
+    updateParentCounts(cb);
+}
+
+function updateParentCounts(cb) {
+    // Find topic/subtopic headers and update counts
+    var row = cb.closest(".pt-row");
+    if (!row) return;
+    var stBody = row.closest(".subtopic-body");
+    if (stBody) {
+        var stNode = stBody.closest(".subtopic-node");
+        var rows = stBody.querySelectorAll(".pt-row input[type=checkbox]");
+        var checked = 0;
+        rows.forEach(function(r) { if (r.checked) checked++; });
+        var countEl = stNode.querySelector(".subtopic-count");
+        if (countEl) countEl.textContent = checked + "/" + rows.length;
+        var stCB = stNode.querySelector(".subtopic-header .node-cb");
+        if (stCB) stCB.checked = (checked === rows.length);
+    }
+    var topicBody = row.closest(".topic-body");
+    if (topicBody) {
+        var topicNode = topicBody.closest(".topic-node");
+        var allRows = topicBody.querySelectorAll(".pt-row input[type=checkbox]");
+        var checkedT = 0;
+        allRows.forEach(function(r) { if (r.checked) checkedT++; });
+        var countElT = topicNode.querySelector(".topic-count");
+        if (countElT) countElT.textContent = checkedT + "/" + allRows.length + " types";
+        var topicCB = topicNode.querySelector(".topic-header .node-cb");
+        if (topicCB) topicCB.checked = (checkedT === allRows.length);
+    }
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+function onSearch() {
+    var query = document.getElementById("search-box").value.toLowerCase().trim();
+    var rows = document.querySelectorAll(".pt-row");
+    rows.forEach(function(row) {
+        var pt = row.dataset.pt || "";
+        if (!query || pt.toLowerCase().indexOf(query) !== -1) {
+            row.classList.remove("hidden");
+        } else {
+            row.classList.add("hidden");
+        }
+    });
+
+    // Auto-expand nodes that have visible results
+    if (query) {
+        document.querySelectorAll(".topic-node").forEach(function(n) {
+            var visible = n.querySelectorAll(".pt-row:not(.hidden)");
+            if (visible.length > 0) {
+                n.classList.add("open");
+                n.querySelector(".topic-header").classList.add("expanded");
+                n.querySelectorAll(".subtopic-node").forEach(function(sn) {
+                    var sv = sn.querySelectorAll(".pt-row:not(.hidden)");
+                    if (sv.length > 0) {
+                        sn.classList.add("open");
+                        sn.querySelector(".subtopic-header").classList.add("expanded");
+                    }
+                });
+            }
+        });
+    }
+}
+
+// ============================================================
+// TOOLBAR ACTIONS
+// ============================================================
+function expandAll() {
+    document.querySelectorAll(".topic-node").forEach(function(n) {
+        n.classList.add("open");
+        n.querySelector(".topic-header").classList.add("expanded");
+    });
+    document.querySelectorAll(".subtopic-node").forEach(function(n) {
+        n.classList.add("open");
+        n.querySelector(".subtopic-header").classList.add("expanded");
+    });
+}
+
+function collapseAll() {
+    document.querySelectorAll(".topic-node").forEach(function(n) {
+        n.classList.remove("open");
+        n.querySelector(".topic-header").classList.remove("expanded");
+    });
+    document.querySelectorAll(".subtopic-node").forEach(function(n) {
+        n.classList.remove("open");
+        n.querySelector(".subtopic-header").classList.remove("expanded");
+    });
+}
+
+function selectAll() {
+    Object.keys(PT_COUNTS).forEach(function(pt) { checkedTypes[pt] = true; });
+    buildTree();
+    updateStats();
+}
+
+function deselectAll() {
+    checkedTypes = {};
+    buildTree();
+    updateStats();
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function updateStats() {
+    var enabledList = Object.keys(checkedTypes);
+    var enabledSet = {};
+    enabledList.forEach(function(pt) { enabledSet[pt] = true; });
+
+    // Count available questions (ALL parts must have enabled type)
+    var qAvail = 0;
+    var qKeys = Object.keys(Q_PT_SETS);
+    qKeys.forEach(function(fname) {
+        var pts = Q_PT_SETS[fname];
+        var allEnabled = true;
+        for (var i = 0; i < pts.length; i++) {
+            if (!enabledSet[pts[i]]) {
+                allEnabled = false;
+                break;
+            }
+        }
+        if (allEnabled) qAvail++;
+    });
+
+    document.getElementById("stat-enabled").textContent = enabledList.length + " enabled";
+    document.getElementById("stat-questions").textContent = qAvail + " questions";
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function generateScheduleJS() {
+    var className = document.getElementById("class-name").value;
+    var teacherName = document.getElementById("teacher-name").value;
+    var markEndpoint = document.getElementById("mark-endpoint").value;
+    var sympyEndpoint = document.getElementById("sympy-endpoint").value;
+
+    var enabledList = [];
+    // Preserve taxonomy order
+    var topics = Object.keys(TAXONOMY);
+    topics.forEach(function(topic) {
+        var subtopics = TAXONOMY[topic];
+        Object.keys(subtopics).forEach(function(subtopic) {
+            var concepts = subtopics[subtopic];
+            Object.keys(concepts).forEach(function(concept) {
+                var pts = concepts[concept];
+                pts.forEach(function(pt) {
+                    if (checkedTypes[pt]) {
+                        enabledList.push(pt);
+                    }
+                });
+            });
+        });
+    });
+
+    // Build the JS string with ASCII encoding
+    var lines = [];
+    lines.push("// schedule.js -- Taught schedule (teacher creates one per class)");
+    lines.push("// Format: flat enabledProblemTypes list. Teacher ticks what they've taught.");
+    lines.push("// ENCODING: This file MUST be pure ASCII. All non-ASCII chars are \\uXXXX escaped.");
+    lines.push("// Generated by Schedule Builder on " + new Date().toISOString().split("T")[0]);
+    lines.push("");
+    lines.push("const TAUGHT_SCHEDULE = {");
+    lines.push('  "className": ' + asciiJsonString(className) + ',');
+    lines.push('  "teacherName": ' + asciiJsonString(teacherName) + ',');
+    lines.push('  "markEndpoint": ' + asciiJsonString(markEndpoint) + ',');
+    lines.push('  "sympyEndpoint": ' + asciiJsonString(sympyEndpoint) + ',');
+    lines.push('  "enabledProblemTypes": [');
+
+    enabledList.forEach(function(pt, i) {
+        var comma = (i < enabledList.length - 1) ? "," : "";
+        lines.push("    " + asciiJsonString(pt) + comma);
+    });
+
+    lines.push("  ]");
+    lines.push("};");
+    lines.push("");
+
+    return lines.join("\n");
+}
+
+function asciiJsonString(str) {
+    // JSON encode with all non-ASCII as \uXXXX
+    var result = '"';
+    for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c === 0x22) result += '\\"';
+        else if (c === 0x5C) result += '\\\\';
+        else if (c === 0x0A) result += '\\n';
+        else if (c === 0x0D) result += '\\r';
+        else if (c === 0x09) result += '\\t';
+        else if (c < 0x20) result += '\\u' + ('0000' + c.toString(16)).slice(-4);
+        else if (c > 0x7E) result += '\\u' + ('0000' + c.toString(16)).slice(-4);
+        else result += str.charAt(i);
+    }
+    result += '"';
+    return result;
+}
+
+function downloadSchedule() {
+    var content = generateScheduleJS();
+    var blob = new Blob([content], { type: "text/javascript;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "schedule.js";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function togglePreview() {
+    var preview = document.getElementById("export-preview");
+    if (preview.style.display === "none") {
+        preview.style.display = "block";
+        document.getElementById("preview-code").textContent = generateScheduleJS();
+    } else {
+        preview.style.display = "none";
+    }
+}
+
+function copyToClipboard() {
+    var content = generateScheduleJS();
+    navigator.clipboard.writeText(content).then(function() {
+        alert("Copied to clipboard!");
+    }).catch(function() {
+        // Fallback
+        var ta = document.createElement("textarea");
+        ta.value = content;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        alert("Copied to clipboard!");
+    });
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function getAllPTsForTopic(topic) {
+    var pts = [];
+    var subtopics = TAXONOMY[topic] || {};
+    Object.keys(subtopics).forEach(function(st) {
+        var concepts = subtopics[st];
+        Object.keys(concepts).forEach(function(c) {
+            pts = pts.concat(concepts[c]);
+        });
+    });
+    return pts;
+}
+
+function getAllPTsForSubtopic(topic, subtopic) {
+    var pts = [];
+    var concepts = (TAXONOMY[topic] || {})[subtopic] || {};
+    Object.keys(concepts).forEach(function(c) {
+        pts = pts.concat(concepts[c]);
+    });
+    return pts;
+}
+
+function esc(s) {
+    if (!s) return "";
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escAttr(s) {
+    if (!s) return "";
+    // Escape for use inside JS string literals in onclick attributes
+    return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+function hashStr(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) {
+        h = ((h << 5) - h) + s.charCodeAt(i);
+        h = h & h;
+    }
+    return Math.abs(h).toString(36);
+}
+</script>
+</body>
+</html>
