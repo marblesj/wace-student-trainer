@@ -281,7 +281,8 @@
       ],
       "Graph Sketching": [
         "Sketching geometric diagram from given conditions",
-        "Sketching graph"
+        "Sketching graph",
+        "Sketching graph using stationary points and points of inflection"
       ],
       "Increments Formula": [
         "Using increments formula",
@@ -464,7 +465,8 @@
         "Evaluating definite integral using linearity and interval properties"
       ],
       "Graph Sketching": [
-        "Sketching accumulation function A(x) = â«[a to x] f(t)dt from graph of f"
+        "Sketching accumulation function A(x) = â«[a to x] f(t)dt from graph of f",
+        "Sketching accumulation function A(x) = ∫[a to x] f(t)dt from graph of f"
       ]
     }
   },
